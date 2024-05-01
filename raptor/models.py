@@ -4,6 +4,8 @@ import requests
 from sentence_transformers import SentenceTransformer
 from tenacity import retry, wait_random_exponential, stop_after_attempt
 import numpy as np
+from typing import Dict, Union, List
+import warnings
 
 class BaseEmbeddingModel(ABC):
     def __init__(self, name: str):
@@ -19,11 +21,11 @@ class JinaEmbeddingModel(BaseEmbeddingModel):
         self.model = SentenceTransformer(model_id, trust_remote_code=True) # trust_remote_code is needed to use the encode method
         self.dims = 768
 
-    def create_embedding(self, text, as_list=True) -> np.ndarray:
+    def create_embedding(self, text, to_numpy=False) -> Dict[str, Union[str, List, np.ndarray]]:
         out = self.model.encode(text)
-        if as_list:
-            return out.tolist()
-        return out
+        if not to_numpy:
+            out = out.tolist()
+        return {"vector": out, "name": self.name}
 
 
 
@@ -38,7 +40,7 @@ class AzureLlamaSummarizationModel(BaseSummarizationModel):
         self.key = os.environ['KEY_70B']
 
 
-    @retry(wait=wait_random_exponential(min=1, max=20), stop=stop_after_attempt(6))
+    @retry(wait=wait_random_exponential(min=4, max=60), stop=stop_after_attempt(12))
     def summarize(self, context, max_tokens=1000, stop_sequence=None):
         message = f"Rewrite the following into a concise paragraph. Do not write anything that is not stated here. Do not miss including anything interesting, surprising or otherwise relevant to the reader.\n\nTEXT: {context}\n\n"
 
@@ -54,4 +56,4 @@ class AzureLlamaSummarizationModel(BaseSummarizationModel):
         if response.status_code == 200:
             return response.json()['choices'][0]['text']
         else:
-            raise Exception(f"Request failed with status code {response.status_code}")
+            raise ConnectionRefusedError(f"Request failed with Response: {response.text}")

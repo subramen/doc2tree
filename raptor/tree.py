@@ -1,10 +1,11 @@
+import os
 import json
 import pickle
 import numpy as np
 from tqdm import tqdm
-from typing import List, Dict
+from typing import List, Dict,Union
 from transformers import AutoTokenizer
-
+import logging
 from text import Document, SentencePreservingChunker, chunk_document
 from clustering import GMMClustering
 from vector_db import FaissVectorDatabase
@@ -23,7 +24,7 @@ class Node:
     - children (List[Node]): A list of the node's children.
     - hash_id (int): The hash id of the node text.
     """
-    def __init__(self, text: str, embedding: Dict[str, np.ndarray], token_count: int, breadcrumb: str = None, page_label: str = None, bbox: List[float] = None, children = None):
+    def __init__(self, text: str, embedding: Dict[str, Union[str, np.ndarray]], token_count: int, breadcrumb: str = "", page_label: str = "", bbox: List[float] = [], children = None):
         self.text = text
         self.embedding = embedding
         self.token_count = token_count
@@ -35,30 +36,38 @@ class Node:
 
 
 class Tree:
-    def __init__(self, root_nodes: List[Node]):
+    def __init__(self, root_nodes: List[Node], layer_to_nodes: Dict[int, List]=None, metadata: Dict[str, str] = {}):
         self.root_nodes = root_nodes
-        self.layer_nodes = self.layer_to_node()
+        self.layer_nodes = layer_to_nodes or self.layer_to_node()
+        self.metadata = metadata
 
     def __str__(self):
         levels = max(self.layer_nodes.keys())
         n_nodes = len(sum(list(self.layer_nodes.values()), []))
-        return f"""Tree with:
-        - {len(layer_nodes[0])} leaves
-        - {len(levels)} levels
-        - {n_nodes} nodes
-        """
+        counts = f"{len(self.layer_nodes[0])} leaves || {levels} levels || {n_nodes} nodes"
+        meta = f"Metadata: {self.metadata}"
+        return f"{counts}\n{meta}"
+
+    @property
+    def all_nodes(self):
+        return (node for node_list in self.layer_nodes.values() for node in node_list)
 
     def layer_to_node(self):
         d = {}
         def helper(node, level):
-            d.get(level, []).append(node)
+            try:
+                d[level].append(node)
+            except KeyError:
+                d[level] = [node]
             if node.children:
                 for child in node.children:
                     helper(child, level + 1)
+
         for node in self.root_nodes:
             helper(node, 0)
-        max_level = max(layer_to_node.keys())
-        return {max_level - k : d[k] for k in range(max_level)}
+        max_level = max(d.keys())
+        assert max_level > 0
+        return {max_level - k : d[k] for k in range(max_level + 1)}
 
     def to_json(self, skip_keys=[], vector_index=""):
         def helper(node, skip_keys=[]):
@@ -96,7 +105,10 @@ class TreeBuilder:
         parent_text_tokens,
         max_layers,
     ):
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
+        except OSError:
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_id, token=os.environ['HF_TOKEN'])
         self.embedding_model = embedding_model
         self.summarization_model = summarization_model
         self.clusterer = clusterer
@@ -111,7 +123,7 @@ class TreeBuilder:
         embedding = self.embedding_model.create_embedding(text)
         return Node(
             text=text,
-            embedding={self.embedding_model.name: embedding},
+            embedding=embedding,
             token_count=len(self.tokenizer.encode(text)),
             breadcrumb=document_chunk["breadcrumb"],
             page_label=document_chunk["page_label"],
@@ -130,12 +142,16 @@ class TreeBuilder:
             A Node object representing the parent node.
         """
         all_text = "\n".join([node.text for node in cluster])
-        summary = self.summarization_model.summarize(all_text, max_tokens=self.parent_text_tokens)
+        try:
+            summary = self.summarization_model.summarize(all_text, max_tokens=self.parent_text_tokens)
+        except ConnectionRefusedError:
+            truncated_text = self.tokenizer.decode(self.tokenizer.encode(all_text)[:self.clusterer.max_cluster_tokens])
+            summary = self.summarization_model.summarize(truncated_text, max_tokens=self.parent_text_tokens)
         assert summary is not None
         embedding = self.embedding_model.create_embedding(summary)
         return Node(
             text=summary,
-            embedding={self.embedding_model.name: embedding},
+            embedding=embedding,
             token_count=len(self.tokenizer.encode(summary)),
             children=cluster
         )
@@ -152,37 +168,19 @@ class TreeBuilder:
 
         current_layer = [self.create_leaf_node(chunk) for chunk in tqdm(chunks_with_metadata, desc=f"Building leaf nodes")]
         layer_to_nodes = {0: current_layer}
+        logging.info(f"Built layer 0 with {len(current_layer)} leaf nodes")
 
-        for i in tqdm(range(1, self.max_layers + 1), desc="Building layers"):
-            clusters = self.clusterer.cluster_nodes(current_layer, self.embedding_model.name)
-            parents = [self.create_parent_node(cluster) for cluster in tqdm(clusters, desc=f"Building parents for level {i}")]
+        for i in tqdm(range(1, self.max_layers + 1), desc=f"Building layers"):
+            clusters = self.clusterer.cluster_nodes(current_layer)
+            logging.info(f"Grouped {len(current_layer)} nodes in layer {i-1} into {len(clusters)} clusters for layer {i}...")
+            # TODO: add multiprocessing
+            parents = [self.create_parent_node(cluster) for cluster in tqdm(clusters, desc=f"Transforming clusters to nodes in layer_{i}")]
             current_layer = parents
+            logging.info(f"Built layer {i} with {len(current_layer)} nodes")
             layer_to_nodes[i] = current_layer
             # stopping criteria
             if len(current_layer) == 1:
                 break
 
-        tree = Tree(current_layer)
+        tree = Tree(current_layer, layer_to_nodes=layer_to_nodes, metadata=document.metadata)
         return tree
-
-
-    def cache_embeddings_to_vectordb(self, tree: Tree, vector_index_file: str = None):
-        """
-        Persist the embeddings of the nodes in the tree to a FAISS index.
-
-        Args:
-            tree (Tree): The tree to persist.
-            vector_index_file (str): The path to the FAISS index file.
-        """
-        dims = self.embedding_model.dims
-        index = FaissVectorDatabase(dims, vector_index_file)
-
-        text = []
-        embeddings = []
-        for node in tqdm(tree.all_nodes(), desc="Persisting embeddings"):
-            text.append(node.text)
-            embeddings.append(node.embedding[self.embedding_model.name])
-        embeddings = np.array(embeddings)
-        index.add_embeddings(text, embeddings)
-
-        index.save()

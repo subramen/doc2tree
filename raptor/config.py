@@ -7,8 +7,6 @@ class TreeBuilderConfig(BaseModel):
     """
     Configuration for the tree builder.
     """
-
-    tokenizer_id: str = 'mistralai/Mistral-7B-v0.1'
     # The maximum number of tokens to consider for a leaf node.
     leaf_text_tokens: int = 256
     # The maximum number of tokens to consider for a parent node.
@@ -23,6 +21,7 @@ class GMMClusteringConfig(BaseModel):
     """
     n_init: int = 3
     max_cluster_tokens: int = 2048  # 8 * leaf_text_tokens
+    max_cluster_size: int = 5
 
 
 class Neo4JDriverConfig(BaseModel):
@@ -31,4 +30,4 @@ class Neo4JDriverConfig(BaseModel):
     """
     uri: str = os.environ['NEO4J_DB']
     user: str = os.environ['NEO4J_USER']
-    password: str = os.environ['NEO4J_PASSWD']
+    password: str = os.environ['NEO4J_KEY']

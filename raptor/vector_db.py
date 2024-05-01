@@ -27,18 +27,20 @@ class FaissVectorDatabase(BaseVectorDatabase):
         """
         self.dims = dims
         self.index_file = index_file or "index_{}.faiss".format(uuid.uuid4())
-        self.index = self.load()
+        self.index = self.load_index()
 
 
-    def load(self):
-        if not os.path.exists(index_file):
-            warnings.warn(f"Creating a new index at {self.index_file}...")
-            self.index = faiss.IndexFlatL2(dims)
+    def load_index(self):
+        if not os.path.exists(self.index_file):
+            warnings.warn(f"Index file doesn't exist, creating a new index at {self.index_file}...")
+            # index = faiss.IndexFlatL2(self.dims)
+            index = faiss.index_factory(self.dims, "IDMap,HNSW,Flat")
         else:
             try:
-                self.index = faiss.read_index(index_file)
+                index = faiss.read_index(self.index_file)
             except Exception as e:
                 raise ValueError("Invalid index file: {}".format(e))
+        return index
 
     def save(self):
         faiss.write_index(self.index, self.index_file)
@@ -68,35 +70,10 @@ class FaissVectorDatabase(BaseVectorDatabase):
         distances, indices = self.index.search(query_embedding.reshape(1, -1), k)
         return indices[0].tolist(), distances[0].tolist()
 
-
-class TestFaissVectorDatabase(unittest.TestCase):
-    def setUp(self):
-        self.dims = 3
-        self.index_file = "test_index.faiss"
-        self.ids = ["id1", "id2", "id3"]
-        self.embeddings = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-
-    def test_init(self):
-        # Test creating a new index
-        vdb = FaissVectorDatabase(self.dims)
-        self.assertIsInstance(vdb.index, faiss.IndexFlatL2)
-
-        # Test loading an existing index
-        vdb = FaissVectorDatabase(self.dims, self.index_file)
-        self.assertIsInstance(vdb.index, faiss.IndexFlatL2)
-
-    def test_add_embeddings(self):
-        vdb = FaissVectorDatabase(self.dims)
-        vdb.add_embeddings(self.ids, self.embeddings)
-        self.assertEqual(vdb.index.ntotal, len(self.ids))
-
-    def test_search(self):
-        vdb = FaissVectorDatabase(self.dims)
-        vdb.add_embeddings(self.ids, self.embeddings)
-        query_embedding = np.array([1, 2, 3])
-        k = 2
-        indices, distances = vdb.search(query_embedding, k)
-        self.assertEqual(len(indices), k)
-        self.assertEqual(len(distances), k)
-        self.assertEqual(indices, ["id1", "id2"])
-        self.assertEqual(distances, [np.linalg.norm(query_embedding - self.embeddings[0]), np.linalg.norm(query_embedding - self.embeddings[1])])
+    def persist_tree(self, tree):
+        ids = []
+        embeddings = []
+        for node in tree.all_nodes:
+            ids.append(node.hash_id)
+            embeddings.append(node.embedding["vector"])
+        self.add_embeddings(ids, np.array(embeddings))

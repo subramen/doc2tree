@@ -6,10 +6,10 @@ import umap
 
 
 class GMMClustering:
-    def __init__(self, n_init: int = 5, max_cluster_tokens: int = 2048):
+    def __init__(self, n_init, max_cluster_tokens, max_cluster_size):
         self.n_init = n_init
         self.max_cluster_tokens = max_cluster_tokens
-        # self.max_cluster_size =max_cluster_size
+        self.max_cluster_size = max_cluster_size  # clusters over this size will need to be reclustered
 
     def find_optimal_components(self, vectors: np.ndarray, min_components: int = 1, max_components: int = 10, n_iter: int = 10) -> int:
         """
@@ -77,26 +77,29 @@ class GMMClustering:
         return labels, n_components
 
 
-    def cluster_nodes(self, nodes: List["Node"], embedding_model_name: str, recursion_level=0, reduced_dimension=10):
+    def cluster_nodes(self, nodes: List["Node"], recursion_level=0, reduced_dimension=10):
+        # TOO LITTLE TEXT
         cluster_token_count = sum([node.token_count for node in nodes])
-
         if cluster_token_count <= self.max_cluster_tokens:
-            print(f"Cluster has {cluster_token_count} tokens across {len(nodes)} nodes. Not clustering anymore.")
+            logging.debug(f"Cluster has {cluster_token_count} tokens across {len(nodes)} nodes. Not clustering anymore.")
             return [nodes]
-        # if len(nodes) <= self.max_cluster_size:
-        #     print(f"Cluster has {len(nodes)} nodes. Not clustering anymore.")
-        #     return [nodes]
 
-        vectors = np.array([node.embedding[embedding_model_name] for node in nodes])
+        # TOO FEW NODES
+        if len(nodes) <= self.max_cluster_size:
+            # To avoid tiny clusters that can't be UMAPped properly
+            print(f"Cluster has {len(nodes)} nodes. Not clustering anymore.")
+            return [nodes]
+
+        vectors = np.array([node.embedding['vector'] for node in nodes])
         labels, n_components = self.cluster_vectors(vectors, reduced_dimension)
-        print(f"\n[LVL {recursion_level}] ### Clustered {len(vectors)} vectors into {n_components} base clusters ###")
+        logging.debug(f"\n[LVL {recursion_level}] ### Clustered {len(vectors)} vectors into {n_components} base clusters ###")
 
         final_clusters = []
         for cluster_id in range(n_components):
             membership_mask = [cluster_id in label for label in labels]
             member_nodes = [node for c, node in enumerate(nodes) if membership_mask[c]]
-            sub_cluster_nodes = self.cluster_nodes(member_nodes, embedding_model_name, recursion_level=recursion_level + 1)
+            sub_cluster_nodes = self.cluster_nodes(member_nodes, recursion_level=recursion_level + 1)
             final_clusters.extend(sub_cluster_nodes)
-        print(f"N final_clusters: {len(final_clusters)}\n")
+        logging.debug(f"N final_clusters: {len(final_clusters)}\n")
 
         return final_clusters
