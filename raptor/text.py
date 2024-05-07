@@ -46,7 +46,11 @@ class SentencePreservingChunker:
         Returns:
             list: A list of tuples representing the start and end indices of each sentence in the text.
         """
-        sentence_splits = [match.start() for match in re.finditer(r'(?<=[.!?;])\s?', text)]
+        if para:
+            pattern = r'(?<=[.!?;])\n{2,}'
+        else:
+            pattern = r'(?<=[.!?;])\s'
+        sentence_splits = [match.start() for match in re.finditer(pattern, text)]
         sentence_idx = []
         c = 0
         for idx in sentence_splits:
@@ -58,6 +62,7 @@ class SentencePreservingChunker:
                 sentence_idx.append((c, idx,))
             c = idx + 1
         return sentence_idx
+
 
     def chunk_spans(self, text: str) -> List[Tuple[int, int]]:
         """

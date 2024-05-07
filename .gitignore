@@ -1,3 +1,5 @@
 init_env.sh
 documents/*
 configs
+*.pyc
+*.faiss
