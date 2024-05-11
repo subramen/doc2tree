@@ -16,7 +16,7 @@ class Node:
 
     Attributes:
     - text (str): The text content of the node.
-    - embedding (Dict[str, np.ndarray]): A dictionary containing the embeddings of the node.
+    - questions(str): The questions extracted from the node's text.
     - token_count (int): The number of tokens in the node's text.
     - breadcrumb (str): The breadcrumb of the node.
     - page_label (str): The page label of the node.
@@ -24,10 +24,11 @@ class Node:
     - children (List[Node]): A list of the node's children.
     - hash_id (int): The hash id of the node text.
     """
-    def __init__(self, text: str, embedding: Dict[str, Union[str, np.ndarray]], token_count: int, breadcrumb: str = "", page_label: str = "", bbox: List[float] = [], children = None):
+    def __init__(self, text: str, token_count: int, questions: str = "", breadcrumb: str = "", page_label: str = "", bbox: List[float] = [], children = None):
         self.text = text
-        self.embedding = embedding
+        # self.embedding = embedding
         self.token_count = token_count
+        self.questions = questions
         self.breadcrumb = breadcrumb
         self.page_label = page_label
         self.bbox = bbox
@@ -100,7 +101,7 @@ class TreeBuilder:
         tokenizer_id,
         clusterer,
         embedding_model,
-        summarization_model,
+        language_model,
         leaf_text_tokens,
         parent_text_tokens,
         max_layers,
@@ -109,8 +110,9 @@ class TreeBuilder:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
         except OSError:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_id, token=os.environ['HF_TOKEN'])
+
         self.embedding_model = embedding_model
-        self.summarization_model = summarization_model
+        self.language_model = language_model
         self.clusterer = clusterer
         self.leaf_text_tokens = leaf_text_tokens
         self.parent_text_tokens = parent_text_tokens
@@ -120,11 +122,11 @@ class TreeBuilder:
 
     def create_leaf_node(self, document_chunk: Dict) -> Node:
         text = document_chunk["text"].strip()
-        embedding = self.embedding_model.create_embedding(text)
+        questions = self.language_model.extract_questions(text)
         return Node(
             text=text,
-            embedding=embedding,
             token_count=len(self.tokenizer.encode(text)),
+            questions=questions,
             breadcrumb=document_chunk["breadcrumb"],
             page_label=document_chunk["page_label"],
             bbox=document_chunk["bbox"]
@@ -143,16 +145,19 @@ class TreeBuilder:
         """
         all_text = "\n".join([node.text for node in cluster])
         try:
-            summary = self.summarization_model.summarize(all_text, max_tokens=self.parent_text_tokens)
+            facts = self.language_model.extract_facts(all_text)
         except ConnectionRefusedError:
             truncated_text = self.tokenizer.decode(self.tokenizer.encode(all_text)[:self.clusterer.max_cluster_tokens])
-            summary = self.summarization_model.summarize(truncated_text, max_tokens=self.parent_text_tokens)
-        assert summary is not None
-        embedding = self.embedding_model.create_embedding(summary)
+            facts = self.language_model.extract_facts(truncated_text)
+
+        assert facts is not None
+        facts = facts.replace("\n- ", " ")
+        questions = self.language_model.extract_questions(facts)
+
         return Node(
-            text=summary,
-            embedding=embedding,
-            token_count=len(self.tokenizer.encode(summary)),
+            text=facts,
+            token_count=len(self.tokenizer.encode(facts)),
+            questions=questions,
             children=cluster
         )
 

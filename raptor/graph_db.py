@@ -11,7 +11,7 @@ class NeoDoc(StructuredNode):
 
 class NeoNode(StructuredNode):
     text = StringProperty()
-    embedding = ArrayProperty()
+    questions = StringProperty()
     token_count = IntegerProperty()
     breadcrumb = StringProperty()
     page_label = StringProperty()
@@ -45,7 +45,7 @@ class Neo4JDriver:
 
     def upload_tree(self, tree):
         def recursive_upload(node, doc_node: NeoDoc, parent_node: NeoNode = None, is_root: bool = False):
-            neo_node = NeoNode(text=node.text, embedding=node.embedding['vector'], token_count=node.token_count, breadcrumb=node.breadcrumb, page_label=node.page_label, bbox=node.bbox, hash_id=node.hash_id).save()
+            neo_node = NeoNode(text=node.text, questions=node.questions, token_count=node.token_count, breadcrumb=node.breadcrumb, page_label=node.page_label, bbox=node.bbox, hash_id=node.hash_id).save()
             if is_root:
                 neo_node.refers_to.connect(doc_node)
             if parent_node:
@@ -59,9 +59,9 @@ class Neo4JDriver:
             recursive_upload(root_node, doc_node, is_root=True)
         return doc_node
 
-    # def get_nodes_by_hash_ids(hash_ids: List[str]) -> List[NeoNode]:
-    #     query = "MATCH (n:NeoNode) WHERE n.hash_id IN {hash_ids} RETURN n"
-    #     params = {"hash_ids": hash_ids}
-    #     results, meta = db.cypher_query(query, params)
-    #     nodes = [NeoNode.inflate(row[0]) for row in results]
-    #     return nodes
+    def get_nodes_by_hash_ids(hash_ids: List[str]) -> List[NeoNode]:
+        query = "MATCH (n:NeoNode) WHERE n.hash_id IN {hash_ids} RETURN n"
+        params = {"hash_ids": hash_ids}
+        results, meta = db.cypher_query(query, params)
+        nodes = [NeoNode.inflate(row[0]) for row in results]
+        return nodes

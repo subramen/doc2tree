@@ -38,7 +38,7 @@ def upload_document(
     graph_client = Neo4JDriver(**neo4j_config.dict())
     graph_client.upload_tree(tree)
 
-    faiss_client = FaissVectorDatabase(embedding_model.dims, vector_index_file)
+    faiss_client = FaissVectorDatabase(embedding_model, vector_index_file)
     faiss_client.persist_tree(tree)
     faiss_client.save()
 
@@ -47,4 +47,4 @@ def upload_document(
 
 if __name__ == "__main__":
     fire.Fire()
-    # python raptor/main.py upload_document --document_path 'documents/28LettersOnYoga-I.pdf' --tokenizer_id 'NousResearch/Nous-Hermes-Llama2-70b' --start_page 0 --end_page 100
+    # python raptor/main.py upload_document --tokenizer_id 'NousResearch/Nous-Hermes-Llama2-70b' --vector_index_file 'rai_guardrailing.faiss' --document_path

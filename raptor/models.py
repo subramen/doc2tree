@@ -19,7 +19,7 @@ class EmbeddingModel:
         self.dims = dims
         self.model = SentenceTransformer(model_id, trust_remote_code=True) # trust_remote_code is needed to use the encode method
 
-    def create_embedding(self, text: str, to_numpy: bool = True) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
+    def get_text_embedding(self, text: str, to_numpy: bool = True) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
         """
         Create an embedding for the given text.
 
@@ -27,10 +27,11 @@ class EmbeddingModel:
             text (str): The text to create an embedding for.
             to_numpy (bool, optional): Whether to convert the embedding to a numpy array
         """
+        text = clean(text)
         out = self.model.encode(text)
         if not to_numpy:
             out = out.tolist()
-        return {"vector": out, "model_id": self.model_id}
+        return out
 
 
 class RerankerModel:
@@ -50,13 +51,17 @@ class RerankerModel:
         candidate_embeddings = self.model.encode(candidates)
         distances = np.dot(query_embedding, candidate_embeddings.T)
         sorted_indices = np.argsort(distances)[::-1]
-        return [candidates[i] for i in sorted_indices]
+        return sorted_indices
+        # return [candidates[i] for i in sorted_indices]
 
 
 class LanguageModel:
     def __init__(self, endpoint, key, model_id="my_llm"):
         self.model_id = model_id
         self.client = OpenAI(api_base=endpoint, api_key=key)
+
+    def _chat_format(self, messages: Dict[str, str]) -> str:
+        raise NotImplementedError
 
     def generate(self,
         prompt: str,
@@ -87,7 +92,46 @@ class LanguageModel:
             stop=stop,
             **vllm_kwargs)["choices"][0]["text"]
 
-    def chat_format(self, messages: Dict[str, str]) -> str:
+    def extract_facts(self, text: str):
+        text = clean(text)
+        msg = {
+            "system": "You are a sharp analyst who can extract all the salient facts from the given text.",
+            "user": f"List down all the important facts contained in the following text:\n\n{text}",
+            "assistant": "Here are the most salient facts in the provided passage:\n\n- "
+        }
+        prompt = self._chat_format(msg)
+        response = "- " + self.generate(prompt, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+        return response
+
+    def extract_questions(self, text: str):
+        text = clean(text)
+        msg = {
+            "system": "You are a sharp analyst who can extract all the salient facts from the given text.",
+            "user": f"Write a list of questions that can be answered by the following text:\n\n{text}",
+            "assistant": "Here are the questions whose answers are in the provided passage:\n\n- "
+        }
+        prompt = self._chat_format(msg)
+        response = "- " + self.generate(prompt, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+        return response
+
+    def write_passage(self, facts: str):
+        msg = {
+            "system": "You are a helpful assistant who can write a passage based on the given facts.",
+            "user": f"Write a short passage based on the following facts:\n\n{facts}",
+            "assistant": "Here is the passage:\n\n"
+        }
+        prompt = self._chat_format(msg)
+        response = self.generate(prompt, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+        return response
+
+
+
+
+class Llama3(LanguageModel):
+    def __init__(self, endpoint, key, model_id="llama3"):
+        super().__init__(endpoint, key, model_id)
+
+    def _chat_format(self, messages: Dict[str, str]) -> str:
         """
         Format the given message for chat generation.
 
@@ -105,24 +149,3 @@ class LanguageModel:
             return f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}"
 
         return "".join(encode(role, content) for role, content in messages.items())
-
-    def extract_facts(self, text: str):
-        text = clean(text)
-        msg = {
-            "system": "You are a sharp analyst who can extract all the salient facts from the given text.",
-            "user": f"List down all the important facts contained in the following text:\n\n{text}",
-            "assistant": "Here are the most salient facts in the provided passage:\n\n- "
-        }
-        prompt = self.chat_format(msg)
-        response = self.generate(prompt, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
-        return response
-
-    def write_passage(self, facts: str):
-        msg = {
-            "system": "You are a helpful assistant who can write a passage based on the given facts.",
-            "user": f"Write a short passage based on the following facts:\n\n{facts}",
-            "assistant": "Here is the passage:\n\n"
-        }
-        prompt = self.chat_format(msg)
-        response = self.generate(prompt, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
-        return response

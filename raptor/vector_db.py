@@ -17,7 +17,7 @@ class BaseVectorDatabase:
         pass
 
 class FaissVectorDatabase(BaseVectorDatabase):
-    def __init__(self, dims: int, index_file: str = None):
+    def __init__(self, embedding_model, index_file: str = None):
         """
         Initialize the FaissVectorDatabase object with a specified number of dimensions and an optional index file.
 
@@ -25,7 +25,8 @@ class FaissVectorDatabase(BaseVectorDatabase):
             dims (int): The number of dimensions in the embeddings.
             index_file (str, optional): The path to the FAISS index file. If provided, the index will be loaded from this file. Otherwise, a new index will be created.
         """
-        self.dims = dims
+        self.embedding_model = embedding_model
+        self.dims = embedding_model.dims
         self.index_file = index_file or "index_{}.faiss".format(uuid.uuid4())
         self.index = self.load_index()
 
@@ -44,7 +45,6 @@ class FaissVectorDatabase(BaseVectorDatabase):
 
     def save(self):
         faiss.write_index(self.index, self.index_file)
-
 
     def add_embeddings(self, ids: List[str], embeddings: np.ndarray):
         """
@@ -72,8 +72,14 @@ class FaissVectorDatabase(BaseVectorDatabase):
 
     def persist_tree(self, tree):
         ids = []
-        embeddings = []
+        txt_embeddings = []
+        q_embeddings = []
         for node in tree.all_nodes:
             ids.append(node.hash_id)
-            embeddings.append(node.embedding["vector"])
-        self.add_embeddings(ids, np.array(embeddings))
+            txt_embeddings.append(self.embedding_model.get_text_embedding(node.text))
+            q_embeddings.append(self.embedding_model.get_text_embedding(node.questions))
+
+        logging.info(f"Persisting text embeddings...")
+        self.add_embeddings(ids, np.array(txt_embeddings))
+        logging.info(f"Persisting question embeddings...")
+        self.add_embeddings(ids, np.array(q_embeddings))
