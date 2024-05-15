@@ -2,33 +2,28 @@ clustering:
   algorithm: GMMClustering
   n_init: 3
   reduced_dimension: 32
-  early_stopping:
-    max_cluster_tokens: 1024
-    max_cluster_size: 5
-  embedding:
-    model: Alibaba-NLP/gte-large-en-v1.5
-    dims: 1024
-    # model: Alibaba-NLP/gte-base-en-v1.5
-    # dims: 768
+  max_cluster_tokens: 1024
+  max_cluster_size: 5
 
-retrieval:
-  model: Alibaba-NLP/gte-large-en-v1.5
+embedding_model:
+  model_id: Alibaba-NLP/gte-large-en-v1.5
   dims: 1024
 
-reranking:
+reranker_model:
   model: avsolatorio/GIST-large-Embedding-v0
 
+language_model:
+  endpoint: "http://localhost:8000/v1"
+  key: ""
+  model_id: "llama3"
+
 tree_builder:
+  tokenizer_id: 'NousResearch/Nous-Hermes-Llama2-70b'
   leaf_text_tokens: 256
   parent_text_tokens: 1024
   max_layers: 3
 
 neo4j:
-  uri:
-  user:
-  password:
-
-llm:
-  endpoint:
-  key:
-  model_id:
+  uri: neo4j+s://06c50578.databases.neo4j.io
+  user: neo4j
+  password: neo4jneo4j

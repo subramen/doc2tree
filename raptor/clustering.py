@@ -6,10 +6,10 @@ import umap
 
 
 class GMMClustering:
-    def __init__(self, n_init, max_cluster_tokens, max_cluster_size):
+    def __init__(self, n_init, cluster_config):
         self.n_init = n_init
-        self.max_cluster_tokens = max_cluster_tokens
-        self.max_cluster_size = max_cluster_size  # clusters over this size will need to be reclustered
+        self.max_cluster_tokens = cluster_config.max_cluster_tokens  # clusters over this size will need to be reclustered
+        self.max_cluster_size = cluster_config.max_cluster_size  # clusters over this size will need to be reclustered
 
     def find_optimal_components(self, vectors: np.ndarray, min_components: int = 1, max_components: int = 10, n_iter: int = 10) -> int:
         """

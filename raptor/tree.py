@@ -100,7 +100,7 @@ class TreeBuilder:
     def __init__(self,
         tokenizer_id,
         clusterer,
-        embedding_model,
+        # embedding_model,
         language_model,
         leaf_text_tokens,
         parent_text_tokens,
@@ -111,7 +111,7 @@ class TreeBuilder:
         except OSError:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_id, token=os.environ['HF_TOKEN'])
 
-        self.embedding_model = embedding_model
+        # self.embedding_model = embedding_model
         self.language_model = language_model
         self.clusterer = clusterer
         self.leaf_text_tokens = leaf_text_tokens
@@ -147,7 +147,8 @@ class TreeBuilder:
         try:
             facts = self.language_model.extract_facts(all_text)
         except ConnectionRefusedError:
-            truncated_text = self.tokenizer.decode(self.tokenizer.encode(all_text)[:self.clusterer.max_cluster_tokens])
+            truncated_length = 4096-700
+            truncated_text = self.tokenizer.decode(self.tokenizer.encode(all_text)[:truncated_length])
             facts = self.language_model.extract_facts(truncated_text)
 
         assert facts is not None

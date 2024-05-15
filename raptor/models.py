@@ -58,10 +58,10 @@ class RerankerModel:
 class LanguageModel:
     def __init__(self, endpoint, key, model_id="my_llm"):
         self.model_id = model_id
-        self.client = OpenAI(api_base=endpoint, api_key=key)
+        self.client = OpenAI(base_url=endpoint, api_key=key)
 
     def _chat_format(self, messages: Dict[str, str]) -> str:
-        raise NotImplementedError
+        return [{"role": role, "content": content} for role, content in messages.items()]
 
     def generate(self,
         prompt: str,
