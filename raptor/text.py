@@ -34,7 +34,7 @@ class SentencePreservingChunker:
         self.tokenizer = tokenizer
         self.max_chunk_len = max_chunk_len
 
-    def sentence_spans(self, text: str, sentence_max_len: int=-1) -> List[Tuple[int, int]]:
+    def sentence_spans(self, text: str) -> List[Tuple[int, int]]:
         """
         Get the sentence boundaries in the given text.
 
@@ -46,18 +46,11 @@ class SentencePreservingChunker:
             list: A list of tuples representing the start and end indices of each sentence in the text.
         """
         pattern = r'(?<=[.!?;])\s'
-        # if para:
-        #     pattern = r'(?<=[.!?;])\n{2,}'
         sentence_splits = [match.start() for match in re.finditer(pattern, text)]
         sentence_idx = []
         c = 0
         for idx in sentence_splits:
-            # somtimes a wayward sentence might be longer than the permissible max_len
-            if sentence_max_len > 0 and idx - c >= sentence_max_len:
-                sentence_idx.append((c, c + sentence_max_len - 1,))
-                sentence_idx.append((c + sentence_max_len - 1, idx,))
-            else:
-                sentence_idx.append((c, idx,))
+            sentence_idx.append((c, idx,))
             c = idx + 1
         return sentence_idx
 
@@ -74,8 +67,8 @@ class SentencePreservingChunker:
         """
 
         # Get the sentence boundaries in the text
-        sentence_idx = self.sentence_spans(text, self.max_chunk_len)
-        # Initialize empty list to store chunk indice
+        sentence_idx = self.sentence_spans(text)
+        # Initialize empty list to store chunk indices
         chunk_idx = []
         chunk = [0, 0]
         current_length = 0
@@ -197,7 +190,7 @@ class Document:
 
 
 
-def chunk_document(doc: Document, chunker: BaseChunker, start_end=(0, None)):
+def get_document_chunks(doc: Document, chunker: BaseChunker, start_end=(0, None)):
     text = doc.read(start_end)
     chunk_spans = chunker.chunk_spans(text)
     start_span = doc.page_spans[start_end[0]][0]
@@ -214,7 +207,7 @@ def chunk_document(doc: Document, chunker: BaseChunker, start_end=(0, None)):
             print(chunk)
         return {
                 "breadcrumb": breadcrumb,
-                "text": chunk,
+                "text": chunk.strip(),
                 "page_label": page_label,
                 "bbox": bbox
             }
@@ -226,16 +219,16 @@ def chunk_document(doc: Document, chunker: BaseChunker, start_end=(0, None)):
 
 
 
-def main(doc_path, tokenizer_id='mistralai/Mistral-7B-v0.1', max_chunk_len=256, start_page=0, end_page=None):
-    chunker = SentencePreservingChunker(AutoTokenizer.from_pretrained(tokenizer_id), max_chunk_len)
-    document = Document(doc_path)
-    chunks_with_metadata = list(chunk_document(document, chunker, start_end=(start_page, end_page)))
-    output_path = f"{doc_path}.chunks.json"
+# def main(doc_path, tokenizer_id='mistralai/Mistral-7B-v0.1', max_chunk_len=256, start_page=0, end_page=None):
+#     chunker = SentencePreservingChunker(AutoTokenizer.from_pretrained(tokenizer_id), max_chunk_len)
+#     document = Document(doc_path)
+#     chunks_with_metadata = list(get_document_chunks(document, chunker, start_end=(start_page, end_page)))
+#     output_path = f"{doc_path}.chunks.json"
 
-    with open(output_path, 'w') as f:
-        json.dump(chunks_with_metadata, f, indent=2)
+#     with open(output_path, 'w') as f:
+#         json.dump(chunks_with_metadata, f, indent=2)
 
-    return chunks_with_metadata
+#     return chunks_with_metadata
 
 
 

@@ -1,3 +1,4 @@
+import logging
 import os
 import faiss
 import numpy as np
@@ -79,7 +80,7 @@ class FaissVectorDatabase(BaseVectorDatabase):
             txt_embeddings.append(node.text_emb)
             q_embeddings.append(node.questions_emb)
 
-        logging.info(f"Persisting text embeddings...")
+        logging.info(f"Persisting {len(txt_embeddings)} text embeddings...")
         self.add_embeddings(ids, np.array(txt_embeddings))
-        logging.info(f"Persisting question embeddings...")
+        logging.info(f"Persisting {len(q_embeddings)} question embeddings...")
         self.add_embeddings(ids, np.array(q_embeddings))
