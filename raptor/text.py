@@ -8,7 +8,6 @@ import fire
 import json
 import logging
 
-logging.basicConfig(level=logging.INFO)
 
 def clean(text):
     text = text.encode('ascii', 'ignore').decode('utf-8')
@@ -46,10 +45,9 @@ class SentencePreservingChunker:
         Returns:
             list: A list of tuples representing the start and end indices of each sentence in the text.
         """
-        if para:
-            pattern = r'(?<=[.!?;])\n{2,}'
-        else:
-            pattern = r'(?<=[.!?;])\s'
+        pattern = r'(?<=[.!?;])\s'
+        # if para:
+        #     pattern = r'(?<=[.!?;])\n{2,}'
         sentence_splits = [match.start() for match in re.finditer(pattern, text)]
         sentence_idx = []
         c = 0

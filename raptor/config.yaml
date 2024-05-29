@@ -1,7 +1,6 @@
 clustering:
-  algorithm: GMMClustering
   n_init: 3
-  reduced_dimension: 32
+  reduced_dim: 10
   max_cluster_tokens: 1024
   max_cluster_size: 5
 
@@ -14,16 +13,22 @@ reranker_model:
 
 language_model:
   endpoint: "http://localhost:8000/v1"
-  key: ""
-  model_id: "llama3"
+  key: "token"
+  model_id: "meta-llama/Meta-Llama-3-8B-Instruct"
 
 tree_builder:
-  tokenizer_id: 'NousResearch/Nous-Hermes-Llama2-70b'
-  leaf_text_tokens: 256
-  parent_text_tokens: 1024
+  tokenizer_id: 'meta-llama/Meta-Llama-3-8B-Instruct'
+  leaf_text_tokens: 128
+  parent_text_tokens: 512
   max_layers: 3
 
+retriever:
+  retriever_k: 30
+  reranker_k: 5
+
 neo4j:
-  uri: neo4j+s://06c50578.databases.neo4j.io
+  uri: 06c50578.databases.neo4j.io:7687
   user: neo4j
   password: neo4jneo4j
+
+HF_TOKEN: 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

@@ -34,7 +34,6 @@ class FaissVectorDatabase(BaseVectorDatabase):
     def load_index(self):
         if not os.path.exists(self.index_file):
             warnings.warn(f"Index file doesn't exist, creating a new index at {self.index_file}...")
-            # index = faiss.IndexFlatL2(self.dims)
             index = faiss.index_factory(self.dims, "IDMap,HNSW,Flat")
         else:
             try:
@@ -56,7 +55,7 @@ class FaissVectorDatabase(BaseVectorDatabase):
         """
         self.index.add_with_ids(embeddings, ids)
 
-    def search(self, query_embedding: np.ndarray, k: int = 10) -> Tuple[List[str], List[float]]:
+    def search(self, query: str, k: int = 10) -> Tuple[List[str], List[float]]:
         """
         Search the index for the k nearest neighbors of a given query embedding.
 
@@ -67,6 +66,7 @@ class FaissVectorDatabase(BaseVectorDatabase):
         Returns:
             A tuple containing two lists: the first list contains the hash strings of the k nearest neighbors, and the second list contains the corresponding distances.
         """
+        query_embedding = self.embedding_model.get_text_embedding(query)
         distances, indices = self.index.search(query_embedding.reshape(1, -1), k)
         return indices[0].tolist(), distances[0].tolist()
 
@@ -76,8 +76,8 @@ class FaissVectorDatabase(BaseVectorDatabase):
         q_embeddings = []
         for node in tree.all_nodes:
             ids.append(node.hash_id)
-            txt_embeddings.append(self.embedding_model.get_text_embedding(node.text))
-            q_embeddings.append(self.embedding_model.get_text_embedding(node.questions))
+            txt_embeddings.append(node.text_emb)
+            q_embeddings.append(node.questions_emb)
 
         logging.info(f"Persisting text embeddings...")
         self.add_embeddings(ids, np.array(txt_embeddings))

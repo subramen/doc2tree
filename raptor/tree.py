@@ -1,14 +1,14 @@
 import os
 import json
 import pickle
+import logging
 import numpy as np
 from tqdm import tqdm
 from typing import List, Dict,Union
 from transformers import AutoTokenizer
-import logging
-from text import Document, SentencePreservingChunker, chunk_document
+
 from clustering import GMMClustering
-from vector_db import FaissVectorDatabase
+from text import Document, SentencePreservingChunker, chunk_document
 
 class Node:
     """
@@ -24,9 +24,8 @@ class Node:
     - children (List[Node]): A list of the node's children.
     - hash_id (int): The hash id of the node text.
     """
-    def __init__(self, text: str, token_count: int, questions: str = "", breadcrumb: str = "", page_label: str = "", bbox: List[float] = [], children = None):
+    def __init__(self, text: str, token_count: int, questions: str = "", breadcrumb: str = "", page_label: str = "", bbox: List[float] = [], children = None, text_emb=None, questions_emb=None):
         self.text = text
-        # self.embedding = embedding
         self.token_count = token_count
         self.questions = questions
         self.breadcrumb = breadcrumb
@@ -34,6 +33,8 @@ class Node:
         self.bbox = bbox
         self.children = children
         self.hash_id = hash(self.text)
+        self.text_emb = text_emb
+        self.questions_emb = questions_emb
 
 
 class Tree:
@@ -92,16 +93,16 @@ class Tree:
     def save(self, directory='.'):
         with open(f"{directory}/tree.pkl", 'wb') as f:
             pickle.dump(self, f)
-        with open(f"{directory}/tree.json", 'w') as f:
-            json.dump(self.to_json(), f, indent=2)
+        # with open(f"{directory}/tree.json", 'w') as f:
+        #     json.dump(self.to_json(), f, indent=2)
 
 
 class TreeBuilder:
     def __init__(self,
         tokenizer_id,
         clusterer,
-        # embedding_model,
         language_model,
+        embedding_model,
         leaf_text_tokens,
         parent_text_tokens,
         max_layers,
@@ -111,9 +112,9 @@ class TreeBuilder:
         except OSError:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_id, token=os.environ['HF_TOKEN'])
 
-        # self.embedding_model = embedding_model
-        self.language_model = language_model
         self.clusterer = clusterer
+        self.language_model = language_model
+        self.embedding_model = embedding_model
         self.leaf_text_tokens = leaf_text_tokens
         self.parent_text_tokens = parent_text_tokens
         self.max_layers = max_layers
@@ -123,13 +124,17 @@ class TreeBuilder:
     def create_leaf_node(self, document_chunk: Dict) -> Node:
         text = document_chunk["text"].strip()
         questions = self.language_model.extract_questions(text)
+        text_emb = self.embedding_model.get_text_embedding(text)
+        questions_emb = self.embedding_model.get_text_embedding(questions)
         return Node(
             text=text,
             token_count=len(self.tokenizer.encode(text)),
             questions=questions,
             breadcrumb=document_chunk["breadcrumb"],
             page_label=document_chunk["page_label"],
-            bbox=document_chunk["bbox"]
+            bbox=document_chunk["bbox"],
+            text_emb=text_emb,
+            questions_emb=questions_emb
         )
 
 
@@ -147,19 +152,23 @@ class TreeBuilder:
         try:
             facts = self.language_model.extract_facts(all_text)
         except ConnectionRefusedError:
-            truncated_length = 4096-700
+            ctx, prompt_buffer = 8192, 1000
+            truncated_length = ctx - prompt_buffer
             truncated_text = self.tokenizer.decode(self.tokenizer.encode(all_text)[:truncated_length])
             facts = self.language_model.extract_facts(truncated_text)
 
-        assert facts is not None
         facts = facts.replace("\n- ", " ")
         questions = self.language_model.extract_questions(facts)
+        text_emb = self.embedding_model.get_text_embedding(facts)
+        questions_emb = self.embedding_model.get_text_embedding(questions)
 
         return Node(
             text=facts,
             token_count=len(self.tokenizer.encode(facts)),
             questions=questions,
-            children=cluster
+            children=cluster,
+            text_emb=text_emb,
+            questions_emb=questions_emb
         )
 
 
@@ -169,6 +178,7 @@ class TreeBuilder:
         start_end: tuple = (0, None,),
     ) -> Tree:
         document = Document(document_path)
+        document.metadata.update({'start_page': start[0], 'end_page': start[1] or -1})
         logging.info(f"Building tree for {document_path}: pages {start_end[0]} to {start_end[1]}")
         chunks_with_metadata = list(chunk_document(document, self.chunker, start_end))
 
@@ -179,7 +189,6 @@ class TreeBuilder:
         for i in tqdm(range(1, self.max_layers + 1), desc=f"Building layers"):
             clusters = self.clusterer.cluster_nodes(current_layer)
             logging.info(f"Grouped {len(current_layer)} nodes in layer {i-1} into {len(clusters)} clusters for layer {i}...")
-            # TODO: add multiprocessing
             parents = [self.create_parent_node(cluster) for cluster in tqdm(clusters, desc=f"Transforming clusters to nodes in layer_{i}")]
             current_layer = parents
             logging.info(f"Built layer {i} with {len(current_layer)} nodes")

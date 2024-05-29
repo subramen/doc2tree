@@ -1,5 +1,6 @@
 from neomodel import StructuredNode, StringProperty, ArrayProperty, IntegerProperty, RelationshipTo, config
 from typing import List
+import logging
 
 class NeoDoc(StructuredNode):
     filepath = StringProperty(required=True)
@@ -42,6 +43,7 @@ class Neo4JDriver:
 
     def set_database_url(self):
         config.DATABASE_URL = f'neo4j+s://{self.user}:{self.password}@{self.uri}'
+        print(f"Set database URL to {config.DATABASE_URL}")
 
     def upload_tree(self, tree):
         def recursive_upload(node, doc_node: NeoDoc, parent_node: NeoNode = None, is_root: bool = False):
