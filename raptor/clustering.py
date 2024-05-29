@@ -75,18 +75,17 @@ class GMMClustering:
         # TOO LITTLE TEXT
         cluster_token_count = sum([node.token_count for node in nodes])
         if cluster_token_count <= self.max_cluster_tokens:
-            logging.info(f"Cluster has {cluster_token_count} tokens across {len(nodes)} nodes. Not clustering anymore.")
+            logging.debug(f"Cluster has {cluster_token_count} tokens across {len(nodes)} nodes. Not clustering anymore.")
             return [nodes]
 
         # TOO FEW NODES
         if len(nodes) <= self.max_cluster_size:
             # To avoid tiny clusters that can't be UMAPped properly
-            logging.info(f"Cluster has {len(nodes)} nodes. Not clustering anymore.")
+            logging.debug(f"Cluster has {len(nodes)} nodes. Not clustering anymore.")
             return [nodes]
 
         vectors = np.array([node.text_emb for node in nodes])
         labels, n_components = self.cluster_vectors(vectors, self.reduced_dim)
-        logging.info(f"\n[LVL {recursion_level}] ### Clustered {len(vectors)} vectors into {n_components} base clusters ###")
 
         final_clusters = []
         for cluster_id in range(n_components):
@@ -94,6 +93,5 @@ class GMMClustering:
             member_nodes = [node for c, node in enumerate(nodes) if membership_mask[c]]
             sub_cluster_nodes = self.cluster_nodes(member_nodes, recursion_level=recursion_level + 1)
             final_clusters.extend(sub_cluster_nodes)
-        logging.debug(f"N final_clusters: {len(final_clusters)}\n")
 
         return final_clusters

@@ -120,23 +120,6 @@ class TreeBuilder:
         self.max_layers = max_layers
         self.chunker = SentencePreservingChunker(self.tokenizer, self.leaf_text_tokens)
 
-
-    # def create_leaf_node(self, document_chunk: Dict) -> Node:
-    #     text = document_chunk["text"]
-    #     questions = self.language_model.extract_questions(text)
-    #     text_emb = self.embedding_model.get_text_embedding(text)
-    #     questions_emb = self.embedding_model.get_text_embedding(questions)
-    #     return Node(
-    #         text=text,
-    #         token_count=len(self.tokenizer.encode(text)),
-    #         questions=questions,
-    #         breadcrumb=document_chunk["breadcrumb"],
-    #         page_label=document_chunk["page_label"],
-    #         bbox=document_chunk["bbox"],
-    #         text_emb=text_emb,
-    #         questions_emb=questions_emb
-    #     )
-
     def create_leaf_node_batched(self, chunks):
         text_batch = [chunk['text'] for chunk in chunks]
         text_emb_batch = self.embedding_model.get_text_embedding(text_batch)
@@ -154,40 +137,6 @@ class TreeBuilder:
                 questions_emb=questions_emb_batch[i]
             ) for i in range(len(chunks))
         ]
-
-
-    # def create_parent_node(self, cluster: List[Node]) -> Node:
-    #     """
-    #     Create a parent node for a list of nodes.
-
-    #     Args:
-    #         nodes (List[Node]): A list of nodes to create a parent node for.
-
-    #     Returns:
-    #         A Node object representing the parent node.
-    #     """
-    #     all_text = "\n".join([node.text for node in cluster])
-    #     try:
-    #         facts = self.language_model.extract_facts(all_text)
-    #     except ConnectionRefusedError:
-    #         ctx, prompt_buffer = 8192, 1000
-    #         truncated_length = ctx - prompt_buffer
-    #         truncated_text = self.tokenizer.decode(self.tokenizer.encode(all_text)[:truncated_length])
-    #         facts = self.language_model.extract_facts(truncated_text)
-
-    #     facts = facts.replace("\n- ", " ")
-    #     questions = self.language_model.extract_questions(facts)
-    #     text_emb = self.embedding_model.get_text_embedding(facts)
-    #     questions_emb = self.embedding_model.get_text_embedding(questions)
-
-    #     return Node(
-    #         text=facts,
-    #         token_count=len(self.tokenizer.encode(facts)),
-    #         questions=questions,
-    #         children=cluster,
-    #         text_emb=text_emb,
-    #         questions_emb=questions_emb
-    #     )
 
 
     def create_parent_node_batched(self, clusters: List[List[Node]]):
@@ -219,18 +168,16 @@ class TreeBuilder:
         logging.info(f"Building tree for {document_path}: pages {start_end[0]} to {start_end[1]}")
         chunks_with_metadata = list(get_document_chunks(document, self.chunker, start_end))
 
-        # current_layer = [self.create_leaf_node(chunk) for chunk in tqdm(chunks_with_metadata, desc=f"Building leaf nodes")]
+        logging.info(f"Built layer 0 with {len(chunks_with_metadata)} leaf nodes")
         current_layer = self.create_leaf_node_batched(chunks_with_metadata)
         layer_to_nodes = {0: current_layer}
-        logging.info(f"Built layer 0 with {len(current_layer)} leaf nodes")
 
         for i in tqdm(range(1, self.max_layers + 1), desc=f"Building layers"):
+            logging.info(f"Clustering {len(current_layer)} nodes in layer {i-1}...")
             clusters = self.clusterer.cluster_nodes(current_layer)
-            logging.info(f"Grouped {len(current_layer)} nodes in layer {i-1} into {len(clusters)} clusters for layer {i}...")
-            # parents = [self.create_parent_node(cluster) for cluster in tqdm(clusters, desc=f"Transforming clusters to nodes in layer_{i}")]
+            logging.info(f"Building layer {i} from {len(clusters)} clusters")
             parents = self.create_parent_node_batched(clusters)
             current_layer = parents
-            logging.info(f"Built layer {i} with {len(current_layer)} nodes")
             layer_to_nodes[i] = current_layer
             # stopping criteria
             if len(current_layer) == 1:

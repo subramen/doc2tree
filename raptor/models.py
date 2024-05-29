@@ -98,7 +98,7 @@ class LanguageModel:
         def _get_message(text):
             return {
                 "system": "You are a sharp analyst who can extract all the salient information from the given text.",
-                "user": f"Rewrite the following text concisely. Don't add anything that is not mentioned in the given text.\n\n{text}",
+                "user": f"Paraphrase the following text in a neutral third-person tone. Don't add anything that is not mentioned in the given text.\n\n{text}",
                 "assistant": "Here is a concise version of the text:\n\n"
             }
 
