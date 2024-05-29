@@ -19,7 +19,7 @@ class EmbeddingModel:
         self.dims = dims
         self.model = SentenceTransformer(model_id, trust_remote_code=True) # trust_remote_code is needed to use the encode method
 
-    def get_text_embedding(self, text: str, to_numpy: bool = True) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
+    def get_text_embedding(self, text: Union[List[str], str], to_numpy: bool = True) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
         """
         Create an embedding for the given text.
 
@@ -27,7 +27,9 @@ class EmbeddingModel:
             text (str): The text to create an embedding for.
             to_numpy (bool, optional): Whether to convert the embedding to a numpy array
         """
-        text = clean(text)
+        if isinstance(text, str):
+            text = [text]
+        text = [clean(t) for t in text]
         out = self.model.encode(text)
         if not to_numpy:
             out = out.tolist()
@@ -83,45 +85,61 @@ class LanguageModel:
 
         if vllm_kwargs is None:
             vllm_kwargs = {}
-        return self.client.completions.create(
+        response = self.client.completions.create(
             model=self.model_id,
             prompt=prompt,
             max_tokens=max_tokens,
             temperature=temperature,
             stop=stop,
-            **vllm_kwargs).choices[0].text
+            **vllm_kwargs).choices
+        return [r.text for r in response]
 
-    def extract_facts(self, text: str):
-        text = clean(text)
-        msg = {
-            "system": "You are a sharp analyst who can extract all the salient information from the given text.",
-            "user": f"List down all the important facts contained in the following text:\n\n{text}",
-            "assistant": "Here are the most salient facts in the provided passage:\n\n- "
-        }
-        prompt = self._prompt_format(msg)
-        response = "- " + self.generate(prompt, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+    def extract_facts(self, text: Union[List[str], str]):
+        def _get_message(text):
+            return {
+                "system": "You are a sharp analyst who can extract all the salient information from the given text.",
+                "user": f"Rewrite the following text concisely. Don't add anything that is not mentioned in the given text.\n\n{text}",
+                "assistant": "Here is a concise version of the text:\n\n"
+            }
+
+        if isinstance(text, str):
+            text = [text]
+        text = [clean(t) for t in text]
+        messages = [_get_message(t) for t in text]
+        prompts = [self._prompt_format(m) for m in messages]
+        response = self.generate(prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
         return response
 
-    def extract_questions(self, text: str):
-        text = clean(text)
-        msg = {
-            "system": "You are a sharp analyst who can extract all the salient information from the given text.",
-            "user": f"Write a list of questions that can be answered by the following text:\n\n{text}",
-            "assistant": "Here are the questions whose answers are in the provided passage:\n\n- "
-        }
-        prompt = self._prompt_format(msg)
-        response = "- " + self.generate(prompt, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+
+    def extract_questions(self, text: Union[List[str], str]):
+        def _get_message(text):
+            return {
+                "system": "You are a sharp analyst who can extract all the salient information from the given text.",
+                "user": f"Write a list of questions that can be answered by the following text:\n\n{text}",
+                "assistant": "Here are the questions whose answers are in the provided passage:\n\n- "
+            }
+
+        if isinstance(text, str):
+            text = [text]
+        text = [clean(t) for t in text]
+        messages = [_get_message(t) for t in text]
+        prompts = [self._prompt_format(m) for m in messages]
+        response = self.generate(prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
         return response
 
-    def write_passage(self, facts: str):
-        msg = {
-            "system": "You are a fluent author who can craft well-written essays from a list of facts.",
-            "user": f"Write a short passage based on the following facts:\n\n{facts}",
-            "assistant": "Here is the passage:\n\n"
-        }
-        prompt = self._prompt_format(msg)
-        response = self.generate(prompt, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
-        return response
+    def write_passage(self, facts: Union[List[str], str]):
+        def _get_message(text):
+            return {
+                "system": "You are a fluent author who can craft well-written essays from a list of facts.",
+                "user": f"Write a short passage based on the following facts:\n\n{text}",
+                "assistant": "Here is the passage:\n\n"
+            }
+        if isinstance(facts, str):
+            facts = [facts]
+        messages = [_get_message(t) for t in facts]
+        prompts = [self._prompt_format(m) for m in messages]
+        response = self.generate(prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+
 
     def write_response(self, question: str, context: str):
         msg = {

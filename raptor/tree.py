@@ -8,7 +8,7 @@ from typing import List, Dict,Union
 from transformers import AutoTokenizer
 
 from clustering import GMMClustering
-from text import Document, SentencePreservingChunker, chunk_document
+from text import Document, SentencePreservingChunker, get_document_chunks
 
 class Node:
     """
@@ -121,55 +121,92 @@ class TreeBuilder:
         self.chunker = SentencePreservingChunker(self.tokenizer, self.leaf_text_tokens)
 
 
-    def create_leaf_node(self, document_chunk: Dict) -> Node:
-        text = document_chunk["text"].strip()
-        questions = self.language_model.extract_questions(text)
-        text_emb = self.embedding_model.get_text_embedding(text)
-        questions_emb = self.embedding_model.get_text_embedding(questions)
-        return Node(
-            text=text,
-            token_count=len(self.tokenizer.encode(text)),
-            questions=questions,
-            breadcrumb=document_chunk["breadcrumb"],
-            page_label=document_chunk["page_label"],
-            bbox=document_chunk["bbox"],
-            text_emb=text_emb,
-            questions_emb=questions_emb
-        )
+    # def create_leaf_node(self, document_chunk: Dict) -> Node:
+    #     text = document_chunk["text"]
+    #     questions = self.language_model.extract_questions(text)
+    #     text_emb = self.embedding_model.get_text_embedding(text)
+    #     questions_emb = self.embedding_model.get_text_embedding(questions)
+    #     return Node(
+    #         text=text,
+    #         token_count=len(self.tokenizer.encode(text)),
+    #         questions=questions,
+    #         breadcrumb=document_chunk["breadcrumb"],
+    #         page_label=document_chunk["page_label"],
+    #         bbox=document_chunk["bbox"],
+    #         text_emb=text_emb,
+    #         questions_emb=questions_emb
+    #     )
+
+    def create_leaf_node_batched(self, chunks):
+        text_batch = [chunk['text'] for chunk in chunks]
+        text_emb_batch = self.embedding_model.get_text_embedding(text_batch)
+        questions_batch = self.language_model.extract_questions(text_batch)
+        questions_emb_batch = self.embedding_model.get_text_embedding(questions_batch)
+        return [
+            Node(
+                text=text_batch[i],
+                token_count=len(self.tokenizer.encode(text_batch[i])),
+                questions=questions_batch[i],
+                breadcrumb=chunks[i]["breadcrumb"],
+                page_label=chunks[i]["page_label"],
+                bbox=chunks[i]["bbox"],
+                text_emb=text_emb_batch[i],
+                questions_emb=questions_emb_batch[i]
+            ) for i in range(len(chunks))
+        ]
 
 
-    def create_parent_node(self, cluster: List[Node]) -> Node:
-        """
-        Create a parent node for a list of nodes.
+    # def create_parent_node(self, cluster: List[Node]) -> Node:
+    #     """
+    #     Create a parent node for a list of nodes.
 
-        Args:
-            nodes (List[Node]): A list of nodes to create a parent node for.
+    #     Args:
+    #         nodes (List[Node]): A list of nodes to create a parent node for.
 
-        Returns:
-            A Node object representing the parent node.
-        """
-        all_text = "\n".join([node.text for node in cluster])
-        try:
-            facts = self.language_model.extract_facts(all_text)
-        except ConnectionRefusedError:
-            ctx, prompt_buffer = 8192, 1000
-            truncated_length = ctx - prompt_buffer
-            truncated_text = self.tokenizer.decode(self.tokenizer.encode(all_text)[:truncated_length])
-            facts = self.language_model.extract_facts(truncated_text)
+    #     Returns:
+    #         A Node object representing the parent node.
+    #     """
+    #     all_text = "\n".join([node.text for node in cluster])
+    #     try:
+    #         facts = self.language_model.extract_facts(all_text)
+    #     except ConnectionRefusedError:
+    #         ctx, prompt_buffer = 8192, 1000
+    #         truncated_length = ctx - prompt_buffer
+    #         truncated_text = self.tokenizer.decode(self.tokenizer.encode(all_text)[:truncated_length])
+    #         facts = self.language_model.extract_facts(truncated_text)
 
-        facts = facts.replace("\n- ", " ")
-        questions = self.language_model.extract_questions(facts)
-        text_emb = self.embedding_model.get_text_embedding(facts)
-        questions_emb = self.embedding_model.get_text_embedding(questions)
+    #     facts = facts.replace("\n- ", " ")
+    #     questions = self.language_model.extract_questions(facts)
+    #     text_emb = self.embedding_model.get_text_embedding(facts)
+    #     questions_emb = self.embedding_model.get_text_embedding(questions)
 
-        return Node(
-            text=facts,
-            token_count=len(self.tokenizer.encode(facts)),
-            questions=questions,
-            children=cluster,
-            text_emb=text_emb,
-            questions_emb=questions_emb
-        )
+    #     return Node(
+    #         text=facts,
+    #         token_count=len(self.tokenizer.encode(facts)),
+    #         questions=questions,
+    #         children=cluster,
+    #         text_emb=text_emb,
+    #         questions_emb=questions_emb
+    #     )
+
+
+    def create_parent_node_batched(self, clusters: List[List[Node]]):
+        text_batch = ["\n".join([node.text for node in cluster]) for cluster in clusters]
+        facts_batch = self.language_model.extract_facts(text_batch)
+        questions_batch = self.language_model.extract_questions(text_batch)
+        facts_emb_batch = self.embedding_model.get_text_embedding(facts_batch)
+        questions_emb_batch = self.embedding_model.get_text_embedding(questions_batch)
+        return [
+            Node(
+                text=facts_batch[i],
+                token_count=len(self.tokenizer.encode(facts_batch[i])),
+                questions=questions_batch[i],
+                children=clusters[i],
+                text_emb=facts_emb_batch[i],
+                questions_emb=questions_emb_batch[i]
+            ) for i in range(len(clusters))
+        ]
+
 
 
     def build_tree_from_document(
@@ -178,18 +215,20 @@ class TreeBuilder:
         start_end: tuple = (0, None,),
     ) -> Tree:
         document = Document(document_path)
-        document.metadata.update({'start_page': start[0], 'end_page': start[1] or -1})
+        document.metadata.update({'start_page': start_end[0], 'end_page': start_end[1] or -1})
         logging.info(f"Building tree for {document_path}: pages {start_end[0]} to {start_end[1]}")
-        chunks_with_metadata = list(chunk_document(document, self.chunker, start_end))
+        chunks_with_metadata = list(get_document_chunks(document, self.chunker, start_end))
 
-        current_layer = [self.create_leaf_node(chunk) for chunk in tqdm(chunks_with_metadata, desc=f"Building leaf nodes")]
+        # current_layer = [self.create_leaf_node(chunk) for chunk in tqdm(chunks_with_metadata, desc=f"Building leaf nodes")]
+        current_layer = self.create_leaf_node_batched(chunks_with_metadata)
         layer_to_nodes = {0: current_layer}
         logging.info(f"Built layer 0 with {len(current_layer)} leaf nodes")
 
         for i in tqdm(range(1, self.max_layers + 1), desc=f"Building layers"):
             clusters = self.clusterer.cluster_nodes(current_layer)
             logging.info(f"Grouped {len(current_layer)} nodes in layer {i-1} into {len(clusters)} clusters for layer {i}...")
-            parents = [self.create_parent_node(cluster) for cluster in tqdm(clusters, desc=f"Transforming clusters to nodes in layer_{i}")]
+            # parents = [self.create_parent_node(cluster) for cluster in tqdm(clusters, desc=f"Transforming clusters to nodes in layer_{i}")]
+            parents = self.create_parent_node_batched(clusters)
             current_layer = parents
             logging.info(f"Built layer {i} with {len(current_layer)} nodes")
             layer_to_nodes[i] = current_layer
