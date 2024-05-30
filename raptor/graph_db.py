@@ -1,6 +1,7 @@
-from neomodel import StructuredNode, StringProperty, ArrayProperty, IntegerProperty, RelationshipTo, config
+import itertools
 from typing import List
-import logging
+from tree import Tree, Node
+from neomodel import StructuredNode, StringProperty, ArrayProperty, IntegerProperty, RelationshipTo, config
 
 class NeoDoc(StructuredNode):
     filepath = StringProperty(required=True)
@@ -11,13 +12,14 @@ class NeoDoc(StructuredNode):
 
 
 class NeoNode(StructuredNode):
+    layer = IntegerProperty()
     text = StringProperty()
     questions = StringProperty()
     token_count = IntegerProperty()
     breadcrumb = StringProperty()
     page_label = StringProperty()
     bbox = ArrayProperty()
-    hash_id = StringProperty()
+    hash_id = IntegerProperty()
     refers_to = RelationshipTo('NeoDoc', "refers_to")
     expands_to = RelationshipTo('NeoNode', "expands_to")
 
@@ -47,7 +49,7 @@ class Neo4JDriver:
 
     def upload_tree(self, tree):
         def recursive_upload(node, doc_node: NeoDoc, parent_node: NeoNode = None, is_root: bool = False):
-            neo_node = NeoNode(text=node.text, questions=node.questions, token_count=node.token_count, breadcrumb=node.breadcrumb, page_label=node.page_label, bbox=node.bbox, hash_id=node.hash_id).save()
+            neo_node = NeoNode(layer=node.layer, text=node.text, questions=node.questions, token_count=node.token_count, breadcrumb=node.breadcrumb, page_label=node.page_label, bbox=node.bbox, hash_id=node.hash_id).save()
             if is_root:
                 neo_node.refers_to.connect(doc_node)
             if parent_node:
@@ -60,6 +62,12 @@ class Neo4JDriver:
         for root_node in tree.root_nodes:
             recursive_upload(root_node, doc_node, is_root=True)
         return doc_node
+
+    def download_tree_nodes(self, neodoc_id: str):
+        query=f"MATCH (x:NeoDoc)<-[:refers_to]-(n:NeoNode)-[:expands_to*]->(m:NeoNode) where elementId(x)='{neodoc_id}' RETURN collect(distinct n), collect(distinct m)"
+        results, meta = db.cypher_query(query)
+        nodes = [Node(**dict(i.items())) for i in itertools.chain(*results[0])]
+        return nodes
 
     def get_nodes_by_hash_ids(hash_ids: List[str]) -> List[NeoNode]:
         query = "MATCH (n:NeoNode) WHERE n.hash_id IN {hash_ids} RETURN n"

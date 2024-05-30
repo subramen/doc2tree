@@ -5,7 +5,6 @@ import numpy as np
 import uuid
 from typing import List, Tuple
 import warnings
-import unittest
 
 class BaseVectorDatabase:
     def __init__(self):
@@ -46,7 +45,7 @@ class FaissVectorDatabase(BaseVectorDatabase):
     def save(self):
         faiss.write_index(self.index, self.index_file)
 
-    def add_embeddings(self, ids: List[str], embeddings: np.ndarray):
+    def add_embeddings(self, ids: np.ndarray, embeddings: np.ndarray):
         """
         Add document embeddings to the index, indexed by their corresponding node elementID strings.
 
@@ -80,7 +79,12 @@ class FaissVectorDatabase(BaseVectorDatabase):
             txt_embeddings.append(node.text_emb)
             q_embeddings.append(node.questions_emb)
 
+        ids = np.array(ids, dtype=np.int64)
+        txt_emb = np.array(txt_embeddings, dtype=np.float32)
+        q_emb = np.array(q_embeddings, dtype=np.float32)
         logging.info(f"Persisting {len(txt_embeddings)} text embeddings...")
-        self.add_embeddings(ids, np.array(txt_embeddings))
+        self.add_embeddings(ids, txt_emb)
         logging.info(f"Persisting {len(q_embeddings)} question embeddings...")
-        self.add_embeddings(ids, np.array(q_embeddings))
+        self.add_embeddings(ids, q_emb)
+
+

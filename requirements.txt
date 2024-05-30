@@ -1,0 +1,11 @@
+omegaconf
+fire
+openai
+sentence-transformers
+torch
+scikit-learn
+umap-learn
+tqdm
+neomodel
+faiss-gpu
+PyMuPDF

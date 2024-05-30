@@ -1,13 +1,9 @@
 import os
-import json
 import pickle
 import logging
-import numpy as np
 from tqdm import tqdm
-from typing import List, Dict,Union
+from typing import List, Dict
 from transformers import AutoTokenizer
-
-from clustering import GMMClustering
 from text import Document, SentencePreservingChunker, get_document_chunks
 
 class Node:
@@ -24,7 +20,8 @@ class Node:
     - children (List[Node]): A list of the node's children.
     - hash_id (int): The hash id of the node text.
     """
-    def __init__(self, text: str, token_count: int, questions: str = "", breadcrumb: str = "", page_label: str = "", bbox: List[float] = [], children = None, text_emb=None, questions_emb=None):
+    def __init__(self, layer: int, text: str, token_count: int, questions: str = "", breadcrumb: str = "", page_label: str = "", bbox: List[float] = [], children = None, text_emb=None, questions_emb=None, hash_id=None):
+        self.layer = layer
         self.text = text
         self.token_count = token_count
         self.questions = questions
@@ -32,9 +29,12 @@ class Node:
         self.page_label = page_label
         self.bbox = bbox
         self.children = children
-        self.hash_id = hash(self.text)
+        self.hash_id = hash_id or hash(self.text)
         self.text_emb = text_emb
         self.questions_emb = questions_emb
+
+    def __repr__(self):
+        return self.__dict__
 
 
 class Tree:
@@ -128,6 +128,7 @@ class TreeBuilder:
         questions_emb_batch = self.embedding_model.get_text_embedding(questions_batch)
         return [
             Node(
+                layer = 0,
                 text=text_batch[i],
                 token_count=len(self.tokenizer.encode(text_batch[i])),
                 questions=questions_batch[i],
@@ -140,7 +141,7 @@ class TreeBuilder:
         ]
 
 
-    def create_parent_node_batched(self, clusters: List[List[Node]]):
+    def create_parent_node_batched(self, clusters: List[List[Node]], layer:int):
         text_batch = ["\n".join([node.text for node in cluster]) for cluster in clusters]
         facts_batch = self.language_model.extract_facts(text_batch)
         questions_batch = self.language_model.extract_questions(text_batch)
@@ -148,6 +149,7 @@ class TreeBuilder:
         questions_emb_batch = self.embedding_model.get_text_embedding(questions_batch)
         return [
             Node(
+                layer=layer,
                 text=facts_batch[i],
                 token_count=len(self.tokenizer.encode(facts_batch[i])),
                 questions=questions_batch[i],
@@ -177,7 +179,7 @@ class TreeBuilder:
             logging.info(f"Clustering {len(current_layer)} nodes in layer {i-1}...")
             clusters = self.clusterer.cluster_nodes(current_layer)
             logging.info(f"Building layer {i} from {len(clusters)} clusters")
-            parents = self.create_parent_node_batched(clusters)
+            parents = self.create_parent_node_batched(clusters, i)
             current_layer = parents
             layer_to_nodes[i] = current_layer
             # stopping criteria

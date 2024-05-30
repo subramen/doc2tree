@@ -64,7 +64,6 @@ class GMMClustering:
         # Vectors can be assigned to multiple clusters
         probs = gmm.predict_proba(vectors)
         if threshold is None:
-            logging.info(f"Threshold is None, using better-than-uniform probability")
             threshold = 1 / n_components
 
         labels = [np.where(prob > threshold)[0] for prob in probs]

@@ -56,7 +56,7 @@ def query_graph(
 
     embedding_model = EmbeddingModel(**config.embedding_model)
     reranker_model = RerankerModel(**config.reranker_model)
-    language_model = LanguageModel(**config.language_model)
+    language_model = Llama3(**config.language_model)
 
     faiss_client = FaissVectorDatabase(embedding_model, vector_index_file=vector_index_file)
     neighbor_idx, _ = faiss_client.search(query, k=config.retriever_k)

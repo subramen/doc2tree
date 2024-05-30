@@ -1,15 +1,10 @@
-import os
 import torch
-import warnings
-import requests
 import numpy as np
 from text import clean
 from openai import OpenAI
 from omegaconf import OmegaConf
-from abc import ABC, abstractmethod
 from typing import Dict, Union, List, Optional, Any
 from sentence_transformers import SentenceTransformer
-from tenacity import retry, wait_random_exponential, stop_after_attempt
 
 
 config = OmegaConf.load('raptor/config.yaml')
@@ -18,7 +13,9 @@ class EmbeddingModel:
     def __init__(self, model_id: str, dims: int, batch_size: int):
         self.model_id = model_id
         self.dims = dims
-        self.model = SentenceTransformer(model_id, trust_remote_code=True) # trust_remote_code is needed to use the encode method
+        self.model = SentenceTransformer(
+            model_id, 
+            trust_remote_code=True)
         self.batch_size = batch_size
 
     def get_text_embedding(self, text: Union[List[str], str]) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
@@ -32,11 +29,8 @@ class EmbeddingModel:
         if isinstance(text, str):
             text = [text]
         text = [clean(t) for t in text]
-        batches = (text[i:i+self.batch_size] for i in range(0, len(text), self.batch_size))
-        result = []
-        with torch.inference_mode():
-            for b in batches:
-                result.extend(self.model.encode(b))
+
+        result = self.model.encode(text, batch_size=self.batch_size, show_progress_bar=True)
         return result
 
 
@@ -94,17 +88,18 @@ class LanguageModel:
         if isinstance(prompt, str):
             prompt = [prompt]
 
-        batches = (prompt[i:i+self.batch_size] for i in range(0, len(prompt), self.batch_size))
-        result = []
-        for b in batches:
-            response = self.client.completions.create(
-                model=self.model_id,
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stop=stop,
-                **vllm_kwargs).choices
-            result.extend([r.text for r in response])
+        # batches = (prompt[i:i+self.batch_size] for i in range(0, len(prompt), self.batch_size))
+        # result = []
+        # for b in batches:
+        response = self.client.completions.create(
+            model=self.model_id,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stop=stop,
+            **vllm_kwargs).choices
+        # result.extend([r.text for r in response])
+        result = [r.text for r in response]
         return result
 
     def extract_facts(self, text: Union[List[str], str]):
