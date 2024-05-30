@@ -1,4 +1,5 @@
 import os
+import torch
 import warnings
 import requests
 import numpy as np
@@ -14,12 +15,13 @@ from tenacity import retry, wait_random_exponential, stop_after_attempt
 config = OmegaConf.load('raptor/config.yaml')
 
 class EmbeddingModel:
-    def __init__(self, model_id: str, dims: int):
+    def __init__(self, model_id: str, dims: int, batch_size: int):
         self.model_id = model_id
         self.dims = dims
         self.model = SentenceTransformer(model_id, trust_remote_code=True) # trust_remote_code is needed to use the encode method
+        self.batch_size = batch_size
 
-    def get_text_embedding(self, text: Union[List[str], str], to_numpy: bool = True) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
+    def get_text_embedding(self, text: Union[List[str], str]) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
         """
         Create an embedding for the given text.
 
@@ -30,10 +32,12 @@ class EmbeddingModel:
         if isinstance(text, str):
             text = [text]
         text = [clean(t) for t in text]
-        out = self.model.encode(text)
-        if not to_numpy:
-            out = out.tolist()
-        return out
+        batches = (text[i:i+self.batch_size] for i in range(0, len(text), self.batch_size))
+        result = []
+        with torch.inference_mode():
+            for b in batches:
+                result.extend(self.model.encode(b))
+        return result
 
 
 class RerankerModel:
@@ -57,15 +61,16 @@ class RerankerModel:
 
 
 class LanguageModel:
-    def __init__(self, endpoint, key, model_id="my_llm"):
+    def __init__(self, endpoint, key, model_id, batch_size: int):
         self.model_id = model_id
         self.client = OpenAI(base_url=endpoint, api_key=key)
+        self.batch_size = batch_size
 
     def _prompt_format(self, messages: Dict[str, str]) -> str:
         raise NotImplementedError
 
     def generate(self,
-        prompt: str,
+        prompt: Union[List[str], str],
         max_tokens: int,
         temperature: float,
         stop: Optional[List[str]] = [],
@@ -85,14 +90,22 @@ class LanguageModel:
 
         if vllm_kwargs is None:
             vllm_kwargs = {}
-        response = self.client.completions.create(
-            model=self.model_id,
-            prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            stop=stop,
-            **vllm_kwargs).choices
-        return [r.text for r in response]
+
+        if isinstance(prompt, str):
+            prompt = [prompt]
+
+        batches = (prompt[i:i+self.batch_size] for i in range(0, len(prompt), self.batch_size))
+        result = []
+        for b in batches:
+            response = self.client.completions.create(
+                model=self.model_id,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stop=stop,
+                **vllm_kwargs).choices
+            result.extend([r.text for r in response])
+        return result
 
     def extract_facts(self, text: Union[List[str], str]):
         def _get_message(text):
@@ -154,8 +167,6 @@ class LanguageModel:
 
 
 class Llama3(LanguageModel):
-    def __init__(self, endpoint, key, model_id):
-        super().__init__(endpoint, key, model_id)
 
     def _prompt_format(self, messages: Dict[str, str]) -> str:
         """

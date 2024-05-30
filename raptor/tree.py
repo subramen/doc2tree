@@ -120,6 +120,7 @@ class TreeBuilder:
         self.max_layers = max_layers
         self.chunker = SentencePreservingChunker(self.tokenizer, self.leaf_text_tokens)
 
+
     def create_leaf_node_batched(self, chunks):
         text_batch = [chunk['text'] for chunk in chunks]
         text_emb_batch = self.embedding_model.get_text_embedding(text_batch)
@@ -168,7 +169,7 @@ class TreeBuilder:
         logging.info(f"Building tree for {document_path}: pages {start_end[0]} to {start_end[1]}")
         chunks_with_metadata = list(get_document_chunks(document, self.chunker, start_end))
 
-        logging.info(f"Built layer 0 with {len(chunks_with_metadata)} leaf nodes")
+        logging.info(f"Building layer 0 with {len(chunks_with_metadata)} chunks / leaf-nodes")
         current_layer = self.create_leaf_node_batched(chunks_with_metadata)
         layer_to_nodes = {0: current_layer}
 

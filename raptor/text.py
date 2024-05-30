@@ -180,7 +180,7 @@ class Document:
     def _get_bbox(self, page_number, text):
         try:
             bbox = list(self.document[page_number].search_for(text)[0])
-        except IndexError:
+        except (IndexError, TypeError) as e:
             logging.info(f"pymupdf could not find text '{text}...' in page {page_number}")
             bbox = []
         return bbox

@@ -22,7 +22,7 @@ def upload_document(
     """
     Main entry point for the CLI.
     """
-
+    logging.info(f"Starting document upload...")
     clusterer = GMMClustering(**config.clustering)
     embedding_model = EmbeddingModel(**config.embedding_model)
     language_model = Llama3(**config.language_model)
