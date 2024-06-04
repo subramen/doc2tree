@@ -29,7 +29,7 @@ class EmbeddingModel:
         if isinstance(text, str):
             text = [text]
         text = [clean(t) for t in text]
-        with torch.inference_mode:
+        with torch.inference_mode():
             result = self.model.encode(text, batch_size=self.batch_size, show_progress_bar=True)
         return result
 
@@ -47,7 +47,7 @@ class RerankerModel:
             query (str): The query to use for reranking.
             candidates (List[str]): The candidates to rerank.
         """
-        with torch.inference_mode:
+        with torch.inference_mode():
             query_embedding = self.model.encode(query)
             candidate_embeddings = self.model.encode(candidates)
         distances = np.dot(query_embedding, candidate_embeddings.T)
@@ -152,10 +152,8 @@ class LanguageModel:
         if not isinstance(context, str):
             context = '\nREFERENCE:  '.join(context)
         msg = {
-            "system": "You are a fluent author who can craft well-written essays on any question or topic from the given references.",
-            # "system": "You are provided with a question and various references. Your task is to write a succinct but detailed essay that elaborates on the question. The essay must be based on the provided references only. If the references do not contain the necessary information to answer the question, respond with 'I don't know'.",
-            # "system": "You are provided with a question and various REFERENCES. Your task is to elaborate on the question and write a coherent answer based on the provided references. If the references do not contain the necessary information to answer the question, respond with 'I don't know'.",
-            "user": f"Write a detailed essay that elaborates on the question below. The essay must be based on the provided references only.\n\nReferences: {context}\n\nQuestion: {question}",
+            "system": "You are a fluent author who can craft well-written essays based on relevant information in the references. If the provided reference does not contain the information, simply say 'I don't know'.",
+            "user": f"Write a detailed long-form article about the question of: {question}.\n\nThe article should only refer to the following references:\n{context}\n",
             "assistant": "Here is the essay:\n\n"
         }
         prompt = self._prompt_format(msg)

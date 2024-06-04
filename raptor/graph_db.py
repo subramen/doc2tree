@@ -77,7 +77,7 @@ class Neo4JDriver:
         return nodes
 
     def nodes_in_paths(self, hash_ids:List[str]):
-        query = """MATCH p=(n)-[*]->(m) WHERE n.id IN $hash_ids AND m.id IN $hash_ids 
+        query = """MATCH p=(n)-[*]->(m) WHERE n.hash_id IN $hash_ids AND m.hash_id IN $hash_ids 
         WITH nodes(p) AS nodes_in_path UNWIND nodes_in_path AS node RETURN DISTINCT node"""
         params = {"hash_ids": hash_ids}
         results, meta = db.cypher_query(query, params)

@@ -64,6 +64,7 @@ def ask(
     neighbor_ids, _ = faiss_client.search(query, k=retrieval_k)
     neighbor_ids = list(dict.fromkeys(neighbor_ids)) # deduplicate
     neighbor_nodes = graph_client.get_nodes_by_hash_ids(neighbor_ids)
+    # neighbor_nodes = graph_client.nodes_in_paths(neighbor_ids)
 
     if use_reranker:
         reranker_model = RerankerModel(**config.reranker_model)
@@ -74,7 +75,7 @@ def ask(
 
     response = {
         'answer': language_model.write_response(query, context),
-        'step1_neighbors': neighbor_ids,
+        'step1_neighbors': neighbor_ids[:config.retrieval.step2_k],
         'step2_neighbors': [neighbor_ids[i] for i in ranked_idx[:config.retrieval.step2_k]] if use_reranker else None,
         'context': context,
     }  
@@ -83,4 +84,3 @@ def ask(
 
 if __name__ == "__main__":
     fire.Fire()
-    # python raptor/main.py upload_document --vector_index_file 'loy.faiss' --document_path 'documents/28LettersOnYoga-I.pdf' --start_page 380 --end_page 400

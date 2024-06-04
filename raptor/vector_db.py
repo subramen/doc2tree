@@ -6,17 +6,8 @@ import uuid
 from typing import List, Tuple
 import warnings
 
-class BaseVectorDatabase:
-    def __init__(self):
-        pass
 
-    def add_embeddings(self, ids: List[str], embeddings: np.ndarray):
-        pass
-
-    def search(self, query_embedding: np.ndarray, k: int = 10) -> Tuple[List[str], List[float]]:
-        pass
-
-class FaissVectorDatabase(BaseVectorDatabase):
+class FaissVectorDatabase():
     def __init__(self, embedding_model, index_file: str = None):
         """
         Initialize the FaissVectorDatabase object with a specified number of dimensions and an optional index file.
@@ -27,13 +18,14 @@ class FaissVectorDatabase(BaseVectorDatabase):
         """
         self.embedding_model = embedding_model
         self.dims = embedding_model.dims
-        self.index_file = index_file or "index_{}.faiss".format(uuid.uuid4())
+        self.index_file = index_file # or "index_{}.faiss".format(uuid.uuid4())
         self.index = self.load_index()
 
 
     def load_index(self):
-        if not os.path.exists(self.index_file):
-            warnings.warn(f"Index file doesn't exist, creating a new index at {self.index_file}...")
+        if self.index_file is None:
+            self.index_file = "index_{}.faiss".format(uuid.uuid4())
+            logging.info(f"creating a new index at {self.index_file}...")
             index = faiss.index_factory(self.dims, "IDMap,HNSW,Flat")
         else:
             try:
