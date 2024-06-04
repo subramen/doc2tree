@@ -68,7 +68,8 @@ class FaissVectorDatabase(BaseVectorDatabase):
         """
         query_embedding = self.embedding_model.get_text_embedding(query)
         distances, indices = self.index.search(query_embedding.reshape(1, -1), k)
-        return indices[0].tolist(), distances[0].tolist()
+        indices = list(map(str, indices[0].tolist()))
+        return indices, distances[0].tolist()
 
     def persist_tree(self, tree):
         ids = []

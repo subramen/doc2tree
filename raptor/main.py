@@ -2,14 +2,14 @@ import os
 import fire
 import logging
 from omegaconf import OmegaConf
-from models import EmbeddingModel, Llama3, RerankerModel
 from clustering import GMMClustering
 from tree import TreeBuilder
 from graph_db import Neo4JDriver
 from vector_db import FaissVectorDatabase
+from models import EmbeddingModel, Llama3, RerankerModel
 
 logging.basicConfig(format="'%(asctime)s - %(name)s - %(levelname)s - %(message)s'", level=logging.INFO)
-config = OmegaConf.load("raptor/config.yaml")
+config = OmegaConf.load("config.yaml")
 os.environ["HF_TOKEN"] = config.HF_TOKEN
 
 def upload_document(
@@ -49,26 +49,35 @@ def upload_document(
     return tree
 
 
-def query_graph(
+def ask(
     query: str,
     vector_index_file: str,
+    use_reranker: bool = False,
     ):
 
     embedding_model = EmbeddingModel(**config.embedding_model)
-    reranker_model = RerankerModel(**config.reranker_model)
     language_model = Llama3(**config.language_model)
-
-    faiss_client = FaissVectorDatabase(embedding_model, vector_index_file=vector_index_file)
-    neighbor_idx, _ = faiss_client.search(query, k=config.retriever_k)
-    neighbor_idx = list(set(neighbor_idx))
-
     graph_client = Neo4JDriver(**config.neo4j)
-    neighbor_nodes = graph_client.get_nodes_by_hash_ids(neighbor_idx)
+    faiss_client = FaissVectorDatabase(embedding_model, index_file=vector_index_file)
+    
+    retrieval_k = config.retrieval.step1_k if use_reranker else config.retrieval.step2_k
+    neighbor_ids, _ = faiss_client.search(query, k=retrieval_k)
+    neighbor_ids = list(dict.fromkeys(neighbor_ids)) # deduplicate
+    neighbor_nodes = graph_client.get_nodes_by_hash_ids(neighbor_ids)
 
-    ranked_idx = reranker_model.rerank(query, [n.text for n in neighbor_nodes])
-    retrieved_context = '\n'.join([neighbor_nodes[idx].text for idx in ranked_idx[:config.reranker_k]])
-    response = language_model.write_response(query, retrieved_context)
+    if use_reranker:
+        reranker_model = RerankerModel(**config.reranker_model)
+        ranked_idx = reranker_model.rerank(query, [n.text for n in neighbor_nodes])
+        context = [neighbor_nodes[idx].text for idx in ranked_idx[:config.retrieval.step2_k]]
+    else: 
+        context = [n.text for n in neighbor_nodes]
 
+    response = {
+        'answer': language_model.write_response(query, context),
+        'step1_neighbors': neighbor_ids,
+        'step2_neighbors': [neighbor_ids[i] for i in ranked_idx[:config.retrieval.step2_k]] if use_reranker else None,
+        'context': context,
+    }  
     return response
 
 

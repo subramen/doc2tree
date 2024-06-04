@@ -7,7 +7,7 @@ from typing import Dict, Union, List, Optional, Any
 from sentence_transformers import SentenceTransformer
 
 
-config = OmegaConf.load('raptor/config.yaml')
+config = OmegaConf.load('config.yaml')
 
 class EmbeddingModel:
     def __init__(self, model_id: str, dims: int, batch_size: int):
@@ -29,8 +29,8 @@ class EmbeddingModel:
         if isinstance(text, str):
             text = [text]
         text = [clean(t) for t in text]
-
-        result = self.model.encode(text, batch_size=self.batch_size, show_progress_bar=True)
+        with torch.inference_mode:
+            result = self.model.encode(text, batch_size=self.batch_size, show_progress_bar=True)
         return result
 
 
@@ -47,10 +47,11 @@ class RerankerModel:
             query (str): The query to use for reranking.
             candidates (List[str]): The candidates to rerank.
         """
-        query_embedding = self.model.encode(query)
-        candidate_embeddings = self.model.encode(candidates)
+        with torch.inference_mode:
+            query_embedding = self.model.encode(query)
+            candidate_embeddings = self.model.encode(candidates)
         distances = np.dot(query_embedding, candidate_embeddings.T)
-        sorted_indices = np.argsort(distances[0])[::-1]
+        sorted_indices = np.argsort(distances)[::-1]
         return sorted_indices
 
 
@@ -118,7 +119,6 @@ class LanguageModel:
         response = self.generate(prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
         return response
 
-
     def extract_questions(self, text: Union[List[str], str]):
         def _get_message(text):
             return {
@@ -148,16 +148,18 @@ class LanguageModel:
         prompts = [self._prompt_format(m) for m in messages]
         response = self.generate(prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
 
-
-    def write_response(self, question: str, context: str):
+    def write_response(self, question: str, context: Union[List[str], str]):
+        if not isinstance(context, str):
+            context = '\nREFERENCE:  '.join(context)
         msg = {
-            "system": "You are provided with a question and various references. Your task is to answer the question succinctly, using the fewest words possible. If the references do not contain the necessary information to answer the question, respond with 'I don't know'. There is no need to explain the reasoning behind your answer",
-            # You are an attentive analyst and fluent communicator. Given a question and some relevant context, write a response. Ensure your response is only based on the provided context. ",
-            "user": f"Context: {context}\n\nQuestion: {question}",
-            "assistant": "Here is the response:\n\n"
+            "system": "You are a fluent author who can craft well-written essays on any question or topic from the given references.",
+            # "system": "You are provided with a question and various references. Your task is to write a succinct but detailed essay that elaborates on the question. The essay must be based on the provided references only. If the references do not contain the necessary information to answer the question, respond with 'I don't know'.",
+            # "system": "You are provided with a question and various REFERENCES. Your task is to elaborate on the question and write a coherent answer based on the provided references. If the references do not contain the necessary information to answer the question, respond with 'I don't know'.",
+            "user": f"Write a detailed essay that elaborates on the question below. The essay must be based on the provided references only.\n\nReferences: {context}\n\nQuestion: {question}",
+            "assistant": "Here is the essay:\n\n"
         }
         prompt = self._prompt_format(msg)
-        response = self.generate(prompt, max_tokens=4096, temperature=0.4)
+        response = self.generate(prompt, max_tokens=config.retrieval.response_length, temperature=config.retrieval.temperature)
         return response
 
 

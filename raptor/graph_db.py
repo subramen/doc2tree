@@ -1,7 +1,7 @@
 import itertools
 from typing import List
 from tree import Tree, Node
-from neomodel import StructuredNode, StringProperty, ArrayProperty, IntegerProperty, RelationshipTo, config
+from neomodel import StructuredNode, StringProperty, ArrayProperty, IntegerProperty, RelationshipTo, config, db
 
 class NeoDoc(StructuredNode):
     filepath = StringProperty(required=True)
@@ -69,8 +69,16 @@ class Neo4JDriver:
         nodes = [Node(**dict(i.items())) for i in itertools.chain(*results[0])]
         return nodes
 
-    def get_nodes_by_hash_ids(hash_ids: List[str]) -> List[NeoNode]:
-        query = "MATCH (n:NeoNode) WHERE n.hash_id IN {hash_ids} RETURN n"
+    def get_nodes_by_hash_ids(self, hash_ids: List[str]) -> List[NeoNode]:
+        query = "MATCH (n:NeoNode) WHERE n.hash_id IN $hash_ids RETURN n"
+        params = {"hash_ids": hash_ids}
+        results, meta = db.cypher_query(query, params)
+        nodes = [NeoNode.inflate(row[0]) for row in results]
+        return nodes
+
+    def nodes_in_paths(self, hash_ids:List[str]):
+        query = """MATCH p=(n)-[*]->(m) WHERE n.id IN $hash_ids AND m.id IN $hash_ids 
+        WITH nodes(p) AS nodes_in_path UNWIND nodes_in_path AS node RETURN DISTINCT node"""
         params = {"hash_ids": hash_ids}
         results, meta = db.cypher_query(query, params)
         nodes = [NeoNode.inflate(row[0]) for row in results]
