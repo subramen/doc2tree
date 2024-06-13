@@ -13,13 +13,13 @@ reranker_model:
   model_id: BAAI/bge-reranker-large
 
 language_model:
-  endpoint: "http://localhost:8000/v1"
-  key: "token"
-  model_id: "meta-llama/Meta-Llama-3-8B-Instruct"
+  endpoint: http://localhost:8000/v1
+  key: token
+  model_id: meta-llama/Meta-Llama-3-8B-Instruct
   batch_size: 128
 
 tree_builder:
-  tokenizer_id: 'meta-llama/Meta-Llama-3-8B-Instruct'
+  tokenizer_id: meta-llama/Meta-Llama-3-8B-Instruct
   leaf_text_tokens: 128
   parent_text_tokens: 512
   max_layers: 3
@@ -31,8 +31,8 @@ retrieval:
   temperature: 0.6
 
 neo4j:
-  uri: 06c50578.databases.neo4j.io:7687
-  user: neo4j
-  password: neo4jneo4j
+  uri: <>
+  user: <>
+  password: <>
 
-HF_TOKEN: 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
+HF_TOKEN: <>
