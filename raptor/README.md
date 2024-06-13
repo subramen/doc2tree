@@ -1,28 +1,21 @@
 # RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval
 
-<!-- ![banner]()
-
-![badge]()
-![badge]()
-[![license](https://img.shields.io/github/license/:user/:repo.svg)](LICENSE)
-[![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme) -->
-
-This repository adapts the [RAPTOR](https://arxiv.org/abs/2401.18059) technique of structuring documents as a tree optimized for retrieval by an LLM.
+This repository adapts the [RAPTOR](https://arxiv.org/abs/2401.18059) technique of structuring documents as a tree optimized for retrieval by an LLM:
+> Retrieval-augmented language models can better adapt to changes in world state and incorporate long-tail knowledge. However, most existing methods retrieve only short contiguous chunks from a retrieval corpus, limiting holistic understanding of the overall document context. We introduce the novel approach of recursively embedding, clustering, and summarizing chunks of text, constructing a tree with differing levels of summarization from the bottom up. At inference time, our RAPTOR model retrieves from this tree, integrating information across lengthy documents at different levels of abstraction. Controlled experiments show that retrieval with recursive summaries offers significant improvements over traditional retrieval-augmented LMs on several tasks. On question-answering tasks that involve complex, multi-step reasoning, we show state-of-the-art results; for example, by coupling RAPTOR retrieval with the use of GPT-4, we can improve the best performance on the QuALITY benchmark by 20% in absolute accuracy
 
 This is NOT a pure implementation of the paper! The code here uses:
 * Neo4J for the graph database
 * FAISS for the vector database
 * Meta Llama 3 served on VLLM
 
-The code here augments each node in the RAPTOR tree with additional LLM-generated interpretations.
-
-The original paper encounters an increased bias towards retrieving leaf nodes. To rectify this, we make use of 2-step retrieval via a reranker model.
+Further modifications:
+* Each node in the RAPTOR tree contains additional LLM-generated interpretations (like questions that can be answered by the node text).
+* 2-step retrieval (via a reranker model) is used to reduce the bias towards retrieving leaf nodes.
 
 
 ## Prerequisites
 * A Neo4J graph URI with write access
 * Access to Meta Llama 3 models on the HuggingFace hub (if using Llama models)
-
 
 
 ## Usage
@@ -41,7 +34,7 @@ To run inference, run the following:
 
 
 
-## RAPTOR in (high-level) detail
+## A summary of how RAPTOR works
 
 ### Document Preprocessing
 * Given a document, we create a `Document` instance that wraps the file along with other metadata.
@@ -70,62 +63,3 @@ To run inference, run the following:
 ### Q&A via Vector Lookups
 * All the embeddings are mapped to the nodes they belong in a vector database.
 * At inference time, given a query, the most relevant embeddings are looked up. The contents of these retrieved nodes form the context based on which the LLM constructs a response.
-
-
-
-
-
-<!-- ## Table of Contents
-
-- [Security](#security)
-- [Background](#background)
-- [Install](#install)
-- [Usage](#usage)
-- [API](#api)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Security
-
-### Any optional sections
-
-## Background
-
-### Any optional sections
-
-## Install
-
-This module depends upon a knowledge of [Markdown]().
-
-```
-```
-
-### Any optional sections
-
-## Usage
-
-```
-```
-
-Note: The `license` badge image link at the top of this file should be updated with the correct `:user` and `:repo`.
-
-### Any optional sections
-
-## API
-
-### Any optional sections
-
-## More optional sections
-
-## Contributing
-
-See [the contributing file](CONTRIBUTING.md)!
-
-PRs accepted.
-
-Small note: If editing the Readme, please conform to the [standard-readme](https://github.com/RichardLitt/standard-readme) specification.
-
-### Any optional sections
-
-## License
- -->
