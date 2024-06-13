@@ -21,10 +21,16 @@ Further modifications:
 ## Usage
 
 Spin up a vLLM model server (tested on an A10G GPU with 24GB VRAM)
-`python -m vllm.entrypoints.openai.api_server --model meta-llama/Meta-Llama-3-8B-Instruct --max-num-seqs 128 --max-model-len 7168 --gpu-memory-utilization 0.75 --kv-cache-dtype fp8_e5m2`
+
+```bash
+python -m vllm.entrypoints.openai.api_server --model meta-llama/Meta-Llama-3-8B-Instruct --max-num-seqs 128 --max-model-len 7168 --gpu-memory-utilization 0.75 --kv-cache-dtype fp8_e5m2
+```
 
 To render a document as a tree, run the following:
-`python raptor/main.py upload_document --document_path '/path/to/document/raptor_arxiv.pdf'`
+
+```bash
+python raptor/main.py upload_document --document_path '/path/to/document/raptor_arxiv.pdf'
+```
 
 Adjust configuration parameters such as size of tree, graph database endpoints, vLLM inference endpoints and batch size for inferece in [](config.yaml)
 This step will take some time depending on the length of the document and the size of the tree.
@@ -32,7 +38,9 @@ This step will take some time depending on the length of the document and the si
 This step will generate a tree in Neo4J and a FAISS index file. Note that FAISS indexes are platform-specific so if you build one on MacOS, the same index will likely not work on a Linux system.
 
 To run inference, run the following:
-`python raptor/main.py ask --query 'What are the advantages of using RAPTOR over other retrieval methods?' --vector_index_file index_00112233.faiss`
+```bash
+python raptor/main.py ask --query 'What are the advantages of using RAPTOR over other retrieval methods?' --vector_index_file index_00112233.faiss
+```
 
 
 
