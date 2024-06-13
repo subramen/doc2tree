@@ -7,18 +7,19 @@ from typing import Dict, Union, List, Optional, Any
 from sentence_transformers import SentenceTransformer
 
 
-config = OmegaConf.load('config.yaml')
+config = OmegaConf.load("config.yaml")
+
 
 class EmbeddingModel:
     def __init__(self, model_id: str, dims: int, batch_size: int):
         self.model_id = model_id
         self.dims = dims
-        self.model = SentenceTransformer(
-            model_id, 
-            trust_remote_code=True)
+        self.model = SentenceTransformer(model_id, trust_remote_code=True)
         self.batch_size = batch_size
 
-    def get_text_embedding(self, text: Union[List[str], str]) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
+    def get_text_embedding(
+        self, text: Union[List[str], str]
+    ) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
         """
         Create an embedding for the given text.
 
@@ -30,7 +31,9 @@ class EmbeddingModel:
             text = [text]
         text = [clean(t) for t in text]
         with torch.inference_mode():
-            result = self.model.encode(text, batch_size=self.batch_size, show_progress_bar=True)
+            result = self.model.encode(
+                text, batch_size=self.batch_size, show_progress_bar=True
+            )
         return result
 
 
@@ -64,13 +67,14 @@ class LanguageModel:
     def _prompt_format(self, messages: Dict[str, str]) -> str:
         raise NotImplementedError
 
-    def generate(self,
+    def generate(
+        self,
         prompt: Union[List[str], str],
         max_tokens: int,
         temperature: float,
         stop: Optional[List[str]] = [],
-        vllm_kwargs: Optional[Dict[str, Any]] = None
-        ) -> str:
+        vllm_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """
         Generate text based on the given prompt.
 
@@ -98,7 +102,8 @@ class LanguageModel:
             max_tokens=max_tokens,
             temperature=temperature,
             stop=stop,
-            **vllm_kwargs).choices
+            **vllm_kwargs,
+        ).choices
         # result.extend([r.text for r in response])
         result = [r.text for r in response]
         return result
@@ -108,7 +113,7 @@ class LanguageModel:
             return {
                 "system": "You are a sharp analyst who can extract all the salient information from the given text.",
                 "user": f"Paraphrase the following text in a neutral third-person tone. Don't add anything that is not mentioned in the given text.\n\n{text}",
-                "assistant": "Here is a concise version of the text:\n\n"
+                "assistant": "Here is a concise version of the text:\n\n",
             }
 
         if isinstance(text, str):
@@ -116,7 +121,9 @@ class LanguageModel:
         text = [clean(t) for t in text]
         messages = [_get_message(t) for t in text]
         prompts = [self._prompt_format(m) for m in messages]
-        response = self.generate(prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+        response = self.generate(
+            prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6
+        )
         return response
 
     def extract_questions(self, text: Union[List[str], str]):
@@ -124,7 +131,7 @@ class LanguageModel:
             return {
                 "system": "You are a sharp analyst who can extract all the salient information from the given text.",
                 "user": f"Write a list of questions that can be answered by the following text:\n\n{text}",
-                "assistant": "Here are the questions whose answers are in the provided passage:\n\n- "
+                "assistant": "Here are the questions whose answers are in the provided passage:\n\n- ",
             }
 
         if isinstance(text, str):
@@ -132,7 +139,9 @@ class LanguageModel:
         text = [clean(t) for t in text]
         messages = [_get_message(t) for t in text]
         prompts = [self._prompt_format(m) for m in messages]
-        response = self.generate(prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+        response = self.generate(
+            prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6
+        )
         return response
 
     def write_passage(self, facts: Union[List[str], str]):
@@ -140,24 +149,31 @@ class LanguageModel:
             return {
                 "system": "You are a fluent author who can craft well-written essays from a list of facts.",
                 "user": f"Write a short passage based on the following facts:\n\n{text}",
-                "assistant": "Here is the passage:\n\n"
+                "assistant": "Here is the passage:\n\n",
             }
+
         if isinstance(facts, str):
             facts = [facts]
         messages = [_get_message(t) for t in facts]
         prompts = [self._prompt_format(m) for m in messages]
-        response = self.generate(prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6)
+        response = self.generate(
+            prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6
+        )
 
     def write_response(self, question: str, context: Union[List[str], str]):
         if not isinstance(context, str):
-            context = '\nREFERENCE:  '.join(context)
+            context = "\nREFERENCE:  ".join(context)
         msg = {
             "system": "You are a fluent author who can craft well-written essays based on relevant information in the references. If the provided reference does not contain the information, simply say 'I don't know'.",
             "user": f"Write a detailed long-form article about the question of: {question}.\n\nThe article should only refer to the following references:\n{context}\n",
-            "assistant": "Here is the essay:\n\n"
+            "assistant": "Here is the essay:\n\n",
         }
         prompt = self._prompt_format(msg)
-        response = self.generate(prompt, max_tokens=config.retrieval.response_length, temperature=config.retrieval.temperature)
+        response = self.generate(
+            prompt,
+            max_tokens=config.retrieval.response_length,
+            temperature=config.retrieval.temperature,
+        )
         return response
 
 
@@ -173,9 +189,11 @@ class Llama3(LanguageModel):
         if "user" not in messages.keys():
             raise ValueError("User message cannot be empty")
         messages["system"] = messages.get("system", "You are a helpful assistant")
-        messages["assistant"] =  messages.get("assistant", "")
+        messages["assistant"] = messages.get("assistant", "")
 
         def encode(role, content):
             return f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}"
 
-        return "".join(encode(role, messages[role]) for role in ["system", "user", "assistant"])
+        return "".join(
+            encode(role, messages[role]) for role in ["system", "user", "assistant"]
+        )

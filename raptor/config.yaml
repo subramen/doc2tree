@@ -7,16 +7,16 @@ clustering:
 embedding_model:
   model_id: Alibaba-NLP/gte-large-en-v1.5
   dims: 1024
-  batch_size: 32
+  batch_size: 4
 
 reranker_model:
-  model: avsolatorio/GIST-large-Embedding-v0
+  model_id: BAAI/bge-reranker-large
 
 language_model:
-  endpoint: <vllm url>
+  endpoint: "http://localhost:8000/v1"
   key: "token"
   model_id: "meta-llama/Meta-Llama-3-8B-Instruct"
-  batch_size: 256
+  batch_size: 128
 
 tree_builder:
   tokenizer_id: 'meta-llama/Meta-Llama-3-8B-Instruct'
@@ -24,11 +24,15 @@ tree_builder:
   parent_text_tokens: 512
   max_layers: 3
 
-retriever:
-  retriever_k: 30
-  reranker_k: 5
+retrieval:
+  step1_k: 200
+  step2_k: 10
+  response_length: 2048
+  temperature: 0.6
 
 neo4j:
-  uri: <>
-  user: <>
-  password: <>
+  uri: 06c50578.databases.neo4j.io:7687
+  user: neo4j
+  password: neo4jneo4j
+
+HF_TOKEN: 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

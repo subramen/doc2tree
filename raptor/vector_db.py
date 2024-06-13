@@ -10,15 +10,15 @@ import warnings
 class FaissVectorDatabase():
     def __init__(self, embedding_model, index_file: str = None):
         """
-        Initialize the FaissVectorDatabase object with a specified number of dimensions and an optional index file.
+        Initialize the FaissVectorDatabase object with an embedding model and an optional index file.
 
         Args:
-            dims (int): The number of dimensions in the embeddings.
+            embedding_model (EmbeddingModel): Model used to generate embeddings for text
             index_file (str, optional): The path to the FAISS index file. If provided, the index will be loaded from this file. Otherwise, a new index will be created.
         """
         self.embedding_model = embedding_model
         self.dims = embedding_model.dims
-        self.index_file = index_file # or "index_{}.faiss".format(uuid.uuid4())
+        self.index_file = index_file
         self.index = self.load_index()
 
 
@@ -39,7 +39,7 @@ class FaissVectorDatabase():
 
     def add_embeddings(self, ids: np.ndarray, embeddings: np.ndarray):
         """
-        Add document embeddings to the index, indexed by their corresponding node elementID strings.
+        Add document embeddings to the index, indexed by their corresponding node hash_id strings.
 
         Args:
             ids (List[str]): A list of id strings for each embedding.
@@ -52,7 +52,7 @@ class FaissVectorDatabase():
         Search the index for the k nearest neighbors of a given query embedding.
 
         Args:
-            query_embedding (np.ndarray): A 1D numpy array of shape (dims,) containing the query embedding.
+            query (str): The query to lookup
             k (int, optional): The number of nearest neighbors to return. Defaults to 10.
 
         Returns:
@@ -64,6 +64,9 @@ class FaissVectorDatabase():
         return indices, distances[0].tolist()
 
     def persist_tree(self, tree):
+        """
+        Persist all nodes in the tree to the vector database.
+        """
         ids = []
         txt_embeddings = []
         q_embeddings = []
@@ -79,5 +82,3 @@ class FaissVectorDatabase():
         self.add_embeddings(ids, txt_emb)
         logging.info(f"Persisting {len(q_embeddings)} question embeddings...")
         self.add_embeddings(ids, q_emb)
-
-
