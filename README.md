@@ -1,6 +1,7 @@
 # RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval
 
-This repository adapts the [RAPTOR](https://arxiv.org/abs/2401.18059) technique of structuring documents as a tree optimized for retrieval by an LLM:
+This repository adapts the [RAPTOR](https://arxiv.org/abs/2401.18059) technique of structuring documents as a retrieval-optimized tree.
+
 > Retrieval-augmented language models can better adapt to changes in world state and incorporate long-tail knowledge. However, most existing methods retrieve only short contiguous chunks from a retrieval corpus, limiting holistic understanding of the overall document context. We introduce the novel approach of recursively embedding, clustering, and summarizing chunks of text, constructing a tree with differing levels of summarization from the bottom up. At inference time, our RAPTOR model retrieves from this tree, integrating information across lengthy documents at different levels of abstraction. Controlled experiments show that retrieval with recursive summaries offers significant improvements over traditional retrieval-augmented LMs on several tasks. On question-answering tasks that involve complex, multi-step reasoning, we show state-of-the-art results; for example, by coupling RAPTOR retrieval with the use of GPT-4, we can improve the best performance on the QuALITY benchmark by 20% in absolute accuracy
 
 This is NOT a pure implementation of the paper! The code here uses:
