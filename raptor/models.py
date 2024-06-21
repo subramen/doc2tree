@@ -19,7 +19,7 @@ class EmbeddingModel:
 
     def get_text_embedding(
         self, text: Union[List[str], str]
-    ) -> Union[Dict[str, np.ndarray], Dict[str, List[float]]]:
+    ) -> Union[Dict[str, np.ndarray]]:
         """
         Create an embedding for the given text.
 
@@ -160,7 +160,7 @@ class LanguageModel:
             prompts, max_tokens=config.tree_builder.parent_text_tokens, temperature=0.6
         )
 
-    def write_response(self, question: str, context: Union[List[str], str]):
+    def longform_response(self, question: str, context: Union[List[str], str]):
         if not isinstance(context, str):
             context = "\nREFERENCE:  ".join(context)
         msg = {
@@ -176,6 +176,34 @@ class LanguageModel:
         )
         return response
 
+    def raft_qa(self, question: str, context: Union[List[str], str]):
+        if not isinstance(context, str):
+            context = "\n- ".join(context)
+
+        msg = {
+            "system": "You are an attentive reader who can answer questions from the provided context.",
+            "user": f"""
+                Question: {question}\nContext: {context}\n
+                - Answer the above question based on the provided context.
+                - To answer the question, think carefully step-by-step. You must share this rationale in your response.
+                - Format your response as a Python dict of strings, like this:
+                ```python
+                response = {
+                    "rationale": "<provide the step-by-step rationale for your answer>",
+                    "answer": "<provide a succinct answer to the question based on the provided context>"
+                }
+                ```
+            """,
+            "assistant": "```python\nresponse = ",
+        }
+        prompt = self._prompt_format(msg)
+        response = self.generate(
+            prompt,
+            max_tokens=config.retrieval.response_length,
+            temperature=config.retrieval.temperature,
+            stop=['```']
+        )
+        return response
 
 class Llama3(LanguageModel):
 

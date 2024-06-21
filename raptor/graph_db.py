@@ -86,8 +86,9 @@ class Neo4JDriver:
     def download_tree_nodes(self, neodoc_id: str):
         query = f"MATCH (x:NeoDoc)<-[:refers_to]-(n:NeoNode)-[:expands_to*]->(m:NeoNode) where elementId(x)='{neodoc_id}' RETURN collect(distinct n), collect(distinct m)"
         results, meta = db.cypher_query(query)
-        nodes = [Node(**dict(i.items())) for i in itertools.chain(*results[0])]
+        nodes = [NeoNode(**dict(i.items())) for i in itertools.chain(*results[0])]
         return nodes
+
 
     def get_nodes_by_hash_ids(self, hash_ids: List[str]) -> List[NeoNode]:
         query = "MATCH (n:NeoNode) WHERE n.hash_id IN $hash_ids RETURN n"
@@ -96,10 +97,42 @@ class Neo4JDriver:
         nodes = [NeoNode.inflate(row[0]) for row in results]
         return nodes
 
-    def nodes_in_paths(self, hash_ids: List[str]):
-        query = """MATCH p=(n)-[*]->(m) WHERE n.hash_id IN $hash_ids AND m.hash_id IN $hash_ids 
-        WITH nodes(p) AS nodes_in_path UNWIND nodes_in_path AS node RETURN DISTINCT node"""
+    def get_distractor_nodes(self, hash_ids: List[str]):
+        """Get nodes which are very different from self"""
+        query = "MATCH (y:NeoNode)<-[:expands_to*]-(:NeoNode)-[:refers_to]->(x:NeoDoc)<-[:refers_to]-(:NeoNode)-[:expands_to*]->(m:NeoNode) where m.hash_id in $hash_ids RETURN m.hash_id, collect(distinct y)[0..5];"
         params = {"hash_ids": hash_ids}
         results, meta = db.cypher_query(query, params)
-        nodes = [NeoNode.inflate(row[0]) for row in results]
-        return nodes
+        distractors = [
+            [NeoNode.inflate(r) for r in row[1]]
+            for row in results
+        ]
+        return distractors
+    
+    def get_node_family(self, hash_ids: List[str]):
+        """Get hash_ids of self, parent, and children"""
+        query = "MATCH (parent:NeoNode)-[:expands_to]->(self:NeoNode)-[:expands_to]->(children:NeoNode) where self.hash_id IN $hash_ids RETURN parent,self, collect(distinct children)"
+        params = {"hash_ids": hash_ids}
+        results, meta = db.cypher_query(query, params)
+
+        families = [
+            dict(
+                parent = NeoNode.inflate(row[0]),
+                self_node = NeoNode.inflate(row[1]),
+                children = [NeoNode(**dict(i.items())) for i in row[2]]
+            ) for row in results ]
+
+        return families
+
+
+
+
+
+    # def nodes_in_paths(self, hash_ids: List[str]):
+    #     query = """MATCH p=(n)-[*]->(m) WHERE n.hash_id IN $hash_ids AND m.hash_id IN $hash_ids 
+    #     WITH nodes(p) AS nodes_in_path UNWIND nodes_in_path AS node RETURN DISTINCT node"""
+    #     params = {"hash_ids": hash_ids}
+    #     results, meta = db.cypher_query(query, params)
+    #     nodes = [NeoNode.inflate(row[0]) for row in results]
+    #     return nodes
+
+
