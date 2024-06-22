@@ -93,9 +93,6 @@ class LanguageModel:
         if isinstance(prompt, str):
             prompt = [prompt]
 
-        # batches = (prompt[i:i+self.batch_size] for i in range(0, len(prompt), self.batch_size))
-        # result = []
-        # for b in batches:
         response = self.client.completions.create(
             model=self.model_id,
             prompt=prompt,
@@ -104,7 +101,7 @@ class LanguageModel:
             stop=stop,
             **vllm_kwargs,
         ).choices
-        # result.extend([r.text for r in response])
+
         result = [r.text for r in response]
         return result
 
@@ -176,27 +173,33 @@ class LanguageModel:
         )
         return response
 
-    def raft_qa(self, question: str, context: Union[List[str], str]):
-        if not isinstance(context, str):
-            context = "\n- ".join(context)
+    def raft_qa(self, question, context):
+        def _get_msg(question, context):
+            if not isinstance(context, str):
+                context = "\n- ".join(context)
+            return {
+                "system": "You are an attentive reader who can answer questions from the provided context.",
+                "user": f"""
+                    Question: {question}\nContext: {context}\n
+                    - Answer the above question based on the provided context.
+                    - To answer the question, think carefully step-by-step. You must share this rationale in your response.
+                    - Format your response as a Python dict of strings, like this:
+                    ```python
+                    response = {
+                        "rationale": "<provide the step-by-step rationale for your answer>",
+                        "answer": "<provide a succinct answer to the question based on the provided context>"
+                    }
+                    ```
+                """,
+                "assistant": "```python\nresponse = ",
+            }
 
-        msg = {
-            "system": "You are an attentive reader who can answer questions from the provided context.",
-            "user": f"""
-                Question: {question}\nContext: {context}\n
-                - Answer the above question based on the provided context.
-                - To answer the question, think carefully step-by-step. You must share this rationale in your response.
-                - Format your response as a Python dict of strings, like this:
-                ```python
-                response = {
-                    "rationale": "<provide the step-by-step rationale for your answer>",
-                    "answer": "<provide a succinct answer to the question based on the provided context>"
-                }
-                ```
-            """,
-            "assistant": "```python\nresponse = ",
-        }
-        prompt = self._prompt_format(msg)
+        if isinstance(question, str):
+            question = [question]
+            context = [context]
+
+        messages = [_get_msg(q,c) for q,c in zip(question, context)]
+        prompts = [self._prompt_format(m) for m in messages]
         response = self.generate(
             prompt,
             max_tokens=config.retrieval.response_length,

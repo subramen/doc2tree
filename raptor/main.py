@@ -158,17 +158,14 @@ Require:
 
 def raft(
     neodoc_id: str,
-    vector_index_file: str,
     threshold: float = 0.85
 ):
     import numpy as np
     from sklearn.metrics.pairwise import cosine_similarity
 
-
     embedding_model = EmbeddingModel(**config.embedding_model)
-    language_model = Llama3(**config.language_model)
     graph_client = Neo4JDriver(**config.neo4j)
-    faiss_client = FaissVectorDatabase(embedding_model, index_file=vector_index_file)
+    language_model = Llama3(**config.language_model)
 
     @dataclass
     class Question:
@@ -177,6 +174,8 @@ def raft(
 
     # Get all the nodes in the tree
     graph_nodes = graph_client.download_tree_nodes(neodoc_id)
+
+    graph_nodes = graph_nodes[:20]
 
     # Get all the questions in the tree
     questions = []
@@ -192,16 +191,25 @@ def raft(
     distinct_ix = [i for i in range(1, len(similarity_matrix)) if all(similarity_matrix[i, :i] < threshold)]
     filtered_questions = [questions[i] for i in distinct_ix]
     
-    def create_raft_sample(Q):
-        question = Q.question
-        oracle_nodes = graph_client.get_node_family([Q.node_hash])
-        oracle_docs = [oracle_nodes['self_node'].text, oracle_nodes['parent'].text, [c.text for c in oracle_nodes['children'][:3]]]
-        distractor_nodes = graph_client.get_distractor_nodes([Q.node_hash])
-        distractor_docs = [c.text for c in distractor_nodes]
-        cot_answer = language_model.raft_qa(question, oracle_docs[:3] + distractor_docs[:3])
-        return dict(question=question, oracle_docs=oracle_docs, distractor_docs=distractor_docs, cot_answer=cot_answer)
-    
+    node_hashes = [str(q.node_hash) for q in filtered_questions]
+    oracle_nodes = graph_client.get_node_family(node_hashes)
+    distractor_nodes = graph_client.get_distractor_nodes(node_hashes)
 
+    data_samples = []
+    cot_inference_batch = []
+    for Q, oracle, distractor in zip(filtered_questions, oracle_nodes, distractor_nodes):
+        question = Q.question
+        oracle_docs = [oracle['self_node'].text, oracle['parent'].text, [c.text for c in oracle['children'][:3]]]
+        distractor_docs = [c.text for c in distractor]
+        data_samples.append(dict(question=question, oracle_docs=oracle_docs, distractor_docs=distractor_docs))
+        cot_inference_batch.append((question, oracle_docs[:3] + distractor_docs[:3]))
+
+    questions, context = zip(*cot_inference_batch)
+    cot_answers = language_model.raft_qa(questions, context)
+    for i in range(len(cot_answers)):
+        data_samples[i]['oracle_cot_answer'] = cot_answers[i]
+    
+    return data_samples
 
 if __name__ == "__main__":
     fire.Fire()
